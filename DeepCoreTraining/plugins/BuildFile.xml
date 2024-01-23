@@ -1,0 +1,43 @@
+<use name="FWCore/Framework"/>
+<use name="FWCore/ParameterSet"/>
+<use name="FWCore/PluginManager"/>
+
+<use name="Geometry/CommonDetUnit"/>
+<use name="Geometry/Records"/>
+
+<use name="RecoLocalTracker/ClusterParameterEstimator"/>
+<use name="RecoLocalTracker/Records"/>
+
+<use name="DataFormats/JetReco"/>
+<use name="DataFormats/VertexReco"/>
+<use name="DataFormats/TrackReco"/>
+<use name="DataFormats/SiPixelDigi"/>
+<use name="DataFormats/Common"/>
+<use name="DataFormats/SiPixelCluster"/>
+<use name="DataFormats/GeometryVector"/>
+<use name="DataFormats/SiPixelDetId"/>
+<use name="DataFormats/Math"/>
+<use name="DataFormats/Candidate"/>
+<use name="SimDataFormats/Track"/>
+<use name="DataFormats/TrackerCommon"/>
+<use name="SimDataFormats/Vertex"/>
+<use name="SimDataFormats/TrackingHit"/>
+
+
+<use name="SimDataFormats/TrackerDigiSimLink"/>
+
+<use name="TrackingTools/GeomPropagators"/>
+<use name="TrackingTools/Records"/>
+
+<use name="MagneticField/Engine"/>
+<use name="MagneticField/Records"/>
+
+<use name="PhysicsTools/UtilAlgos"/>
+<use name="FWCore/ServiceRegistry"/>
+
+<use name="SimG4Core/Application"/>
+<use name="SimG4Core/Notification"/>
+
+
+<flags EDM_PLUGIN="1"/>
+

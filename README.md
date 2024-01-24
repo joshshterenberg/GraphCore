@@ -1,4 +1,7 @@
 # GraphCore (Working Title)
+
+### Josh's Version
+
 Graph-based approach to track reconstruction in cores of jets.
 
 Python3 virtual environment: `. env.sh`

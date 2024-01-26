@@ -123,8 +123,8 @@ class DeepCoreNtuplizer : public edm::stream::EDProducer<> {
         TTree* DeepCoreNtuplizerTree;
         int eventID;
         
-        double caloJetP,caloJetPt,caloJetEta,caloJetPhi;
-        std::vector<double> pixelXvec,pixelYvec,pixelZvec,pixelEtavec,pixelPhivec,pixelChargevec, pixelSimTrackPtvec, pixelSimTrackEtavec, pixelSimTrackPhivec;
+        float caloJetP,caloJetPt,caloJetEta,caloJetPhi;
+        std::vector<float> pixelXvec,pixelYvec,pixelZvec,pixelUvec,pixelVvec,pixelEtavec,pixelPhivec,pixelChargevec, pixelSimTrackPtvec, pixelSimTrackEtavec, pixelSimTrackPhivec;
         std::vector<int> pixelTrackerLayervec,pixelSimTrackIDvec, pixelSimTrackPdgvec;
 
 
@@ -236,20 +236,29 @@ DeepCoreNtuplizer::DeepCoreNtuplizer(const edm::ParameterSet& iConfig) :
     DeepCoreNtuplizerTree->Branch("caloJetPhi",&caloJetPhi);
 
     //pixel variables
-    DeepCoreNtuplizerTree->Branch("pixelX",&pixelXvec);
-    DeepCoreNtuplizerTree->Branch("pixelY",&pixelYvec);
-    DeepCoreNtuplizerTree->Branch("pixelZ",&pixelZvec);
-    DeepCoreNtuplizerTree->Branch("pixelCharge",&pixelChargevec);
-    DeepCoreNtuplizerTree->Branch("pixelEta",&pixelEtavec);
+
+    DeepCoreNtuplizerTree->Branch("pixelR",&pixelYvec);
     DeepCoreNtuplizerTree->Branch("pixelPhi",&pixelPhivec);
+    DeepCoreNtuplizerTree->Branch("pixelZ",&pixelZvec);
+    
+    DeepCoreNtuplizerTree->Branch("pixelEta",&pixelEtavec);
+    
+    //DeepCoreNtuplizerTree->Branch("pixelX",&pixelXvec);
+    //DeepCoreNtuplizerTree->Branch("pixelY",&pixelYvec);
+    //Conformal coordinates instead of x,y
+    DeepCoreNtuplizerTree->Branch("pixelU",&pixelXvec);
+    DeepCoreNtuplizerTree->Branch("pixelV",&pixelYvec);
+
+    DeepCoreNtuplizerTree->Branch("pixelCharge",&pixelChargevec);
     DeepCoreNtuplizerTree->Branch("pixelTrackerLayer",&pixelTrackerLayervec);
     
     //truth labeling
     DeepCoreNtuplizerTree->Branch("pixelSimTrackID",&pixelSimTrackIDvec);
-    DeepCoreNtuplizerTree->Branch("pixelSimTrackPdg",&pixelSimTrackPdgvec);
-    DeepCoreNtuplizerTree->Branch("pixelSimTrackPt",&pixelSimTrackPtvec);
-    DeepCoreNtuplizerTree->Branch("pixelSimTrackEta",&pixelSimTrackEtavec);
-    DeepCoreNtuplizerTree->Branch("pixelSimTrackPhi",&pixelSimTrackPhivec);
+    //extra truth info not needed for training
+    //DeepCoreNtuplizerTree->Branch("pixelSimTrackPdg",&pixelSimTrackPdgvec);
+    //DeepCoreNtuplizerTree->Branch("pixelSimTrackPt",&pixelSimTrackPtvec);
+    //DeepCoreNtuplizerTree->Branch("pixelSimTrackEta",&pixelSimTrackEtavec);
+    //DeepCoreNtuplizerTree->Branch("pixelSimTrackPhi",&pixelSimTrackPhivec);
 
 
 
@@ -344,6 +353,8 @@ void DeepCoreNtuplizer::produce(edm::Event& iEvent, const edm::EventSetup& iSetu
                             SiPixelCluster::Pixel pixel=cluster->pixel(pixel_i);
                             LocalPoint pixelLocalPoint = pixel2Local(pixel.x,pixel.y,det);
                             GlobalPoint pixelGlobalPoint = det->toGlobal(pixelLocalPoint);
+                            float pixelX = pixelGlobalPoint.x();
+                            float pixelY = pixelGlobalPoint.y();
                             if(fabs(pixelGlobalPoint.phi())>0) nPixels++;
                             
                             int pixelLayer = tTopo->layer(det->geographicalId());
@@ -358,13 +369,16 @@ void DeepCoreNtuplizer::produce(edm::Event& iEvent, const edm::EventSetup& iSetu
                             simTrackIdPdgPtEtaPhi = DeepCoreNtuplizer::getOneSimTrackFromPixel( pixel, DetSetOfClusters.id());
 
                             //FILL
-                            pixelXvec.push_back(pixelGlobalPoint.x());
-                            pixelYvec.push_back(pixelGlobalPoint.y());
+                            pixelXvec.push_back(pixelX);
+                            pixelYvec.push_back(pixelY);
                             pixelZvec.push_back(pixelGlobalPoint.z());
                             pixelEtavec.push_back(pixelGlobalPoint.eta());
                             pixelPhivec.push_back(pixelGlobalPoint.phi());
                             pixelTrackerLayervec.push_back(pixelLayer);
                             pixelChargevec.push_back((pixel.adc)/(float)(14000));
+                            pixelUvec.push_back(pixelX/(pixelX*pixelX+pixelY*pixelY));
+                            pixelVvec.push_back(pixelY/(pixelX*pixelX+pixelY*pixelY));
+
 
                             pixelSimTrackIDvec.push_back( std::get<0>(simTrackIdPdgPtEtaPhi));
                             pixelSimTrackPdgvec.push_back(std::get<1>(simTrackIdPdgPtEtaPhi));
@@ -385,6 +399,8 @@ void DeepCoreNtuplizer::produce(edm::Event& iEvent, const edm::EventSetup& iSetu
             pixelPhivec.clear();
             pixelTrackerLayervec.clear();
             pixelChargevec.clear();
+            pixelUvec.clear();
+            pixelVvec.clear();
             
             pixelSimTrackIDvec.clear();
             pixelSimTrackPdgvec.clear();
@@ -408,7 +424,7 @@ void DeepCoreNtuplizer::getSimTracksFromPixel(SiPixelCluster::Pixel pixel, unsig
                 std::cout << " fraction " << linkiter.fraction() << std::endl;
                 for(auto iter = simtracksVector->begin(); iter != simtracksVector->end(); ++iter){
                     
-                    if(iter->trackId() == linkiter.SimTrackId() && iter->momentum().Pt()>0.2 && iter->momentum().Pt()<99999){ //cut on P() instead?
+                    if(iter->trackId() == linkiter.SimTrackId() && iter->momentum().P()>0.2 && iter->momentum().Pt()<99999){ 
                         bool isNew = true;
                         for(auto iD : uniqueSimTrackIds){
                             if(iD==(unsigned int)(iter->trackId())) isNew=false;

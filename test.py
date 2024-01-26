@@ -67,15 +67,24 @@ def main():
 
         #clusterize data with DBSCAN (arbitrary hyperparams so far)
         preclust = latent_2.numpy()
-        clusterizer = KMeans(eps=0.01)
+        clusterizer = DBSCAN()
         clusterizer.fit(preclust)
+
+
 
         #get metadata of predicted track and compare
         u_labels = np.unique(clusterizer.labels_)
+
+
         for l in u_labels:
-            c_i = preclust[:, clusterizer.labels_ == l]
-            avg_i = np.mean(c_i, axis=1)
+            if l == -1: continue
+
+            c_i = preclust[clusterizer.labels_ == l]
+            avg_i = []
+            for j in range(len(preclust[0])):
+                avg_i.append(np.mean(c_i[:,j]))
             print(f"Cluster {l} Average: {avg_i}")
+            
 
 
 

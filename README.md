@@ -1,6 +1,6 @@
 <div align="center">
   
-# :octopus: OCToPi: Object Condensation Tracking on Pixels :octopus:
+## :octopus: OCToPi: Object Condensation Tracking on Pixels :octopus:
 ![](readme_assets/banner.jpg) 
 
 A graph-neural-network-based approach to track reconstruction in the near-axis cores of jets, for the CMSSW.

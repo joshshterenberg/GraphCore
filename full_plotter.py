@@ -33,7 +33,7 @@ def main():
         model.eval()
 
         #testing
-        i = int(input("Type track number to test on: "))
+        i = int(input("Type track number to plot: "))
         xvals = coords['pixelX'][i].to_numpy()
         yvals = coords['pixelY'][i].to_numpy()
         zvals = coords['pixelZ'][i].to_numpy()
@@ -67,64 +67,44 @@ def main():
         with torch.no_grad():
             latent_2 = model(latent, edge_index)
 
-        #clusterize data with DBSCAN (arbitrary hyperparams so far)
-        preclust = latent_2.numpy()
-        clusterizer = DBSCAN()
-        clusterizer.fit(preclust)
+        
+        colors = np.zeros(len(simIDs))
+        for i,uniqueID in enumerate(uniqueIDs):
+            colors[simIDs==uniqueID]=i/(nUniqueIDs+1.0)
+        
 
+        fig=plt.figure(constrained_layout=True)
+        fig.suptitle("Pixels in Jet by SimTrack",fontsize=14,weight='bold')
+        #fig.tight_layout()
 
+        ax=fig.add_subplot(311,projection='3d')
+        ax.scatter(xvals,yvals,zvals,c=colors,cmap="hsv")
+        ax.set_title("Jet")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_zlabel("z")
 
-        #get metadata of predicted track and compare
-        u_labels = np.unique(clusterizer.labels_)
+        ax2=fig.add_subplot(312,projection='3d')
+        ax2.scatter(latent[:,0].detach().numpy(),latent[:,1].detach().numpy(),latent[:,2].detach().numpy(),c=colors,cmap="hsv")
+        ax2.set_title("Post-MLP Representation")
+        ax2.set_xlabel("v1")
+        ax2.set_ylabel("v2")
+        ax2.set_zlabel("v3")
+        
 
+        ax3=fig.add_subplot(313,projection='3d')
+        ax3.scatter(latent_2[:,0].detach().numpy(),latent_2[:,1].detach().numpy(),latent_2[:,2].detach().numpy(),c=colors,cmap="hsv")
+        ax3.set_title("Post-GNN Representation")
+        ax3.set_xlabel("v1")
+        ax3.set_ylabel("v2")
+        ax3.set_zlabel("v3")
 
-        for l in u_labels:
-            if l == -1: continue
-
-            c_i = preclust[clusterizer.labels_ == l]
-            avg_i = []
-            for j in range(len(preclust[0])):
-                avg_i.append(np.mean(c_i[:,j]))
-            print(f"Cluster {l} Average: {avg_i}")
-           
-
-        print()
-
-        # metric definitions:
-        # metric 1: how many different particles per identified cluster 
-        for l in u_labels:
-            if l==-1: continue
-
-            extraneous_i = 0
-            total_sims = []
-            for i in range(len(preclust)):
-                if clusterizer.labels_[i] == l:
-                    total_sims.append(Y[i])
-            print(f"Cluster {l}: total points: {len(total_sims)}.", end=" ")
-            print(total_sims)
-            counts = Counter(total_sims)
-            mce = counts.most_common(1)[0][0]
-            total_sims = [item for item in total_sims if item != mce]
-            extraneous_i = len(total_sims)
-            print(f"different SimIDs: {extraneous_i}")
-
-
-
-
-
-
-
-
+        plt.show()
+    
+    
 
 
 
 
 if __name__=="__main__":
     main()
-
-
-
-
-
-
-

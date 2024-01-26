@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_metric_learning import distances, losses, miners, reducers, testers 
 
+from sklearn.cluster import DBSCAN, KMeans, SpectralClustering
 
 class Net(nn.Module):
     def __init__(self,d):
@@ -49,7 +50,7 @@ def main():
         #plot one jet core
         n=1
 
-        mva = Net(d=6)
+        mva = Net(d=6) ## with xmod set, without should be 6
         
         opt = torch.optim.SGD(mva.parameters(),lr=.001,momentum=0.5)
         opt = torch.optim.Adam(mva.parameters(),lr=.001)
@@ -57,44 +58,81 @@ def main():
         
         coords = tree.arrays()#,entry_start=n,entry_stop=n+1) 
 
-        mva.train()
-        #train loop
-        #pdb.set_trace()
-        for epoch in range(500):
-            print("EPOCH {}".format(epoch)) 
-            for i in range(coords['caloJetPt'].to_numpy().shape[0]):
-                if i%2==0:
-                    xvals = coords['pixelX'][i].to_numpy()
-                    yvals = coords['pixelY'][i].to_numpy()
-                    zvals = coords['pixelZ'][i].to_numpy()
-                    etavals = coords['pixelEta'][i].to_numpy()
-                    phivals= coords['pixelPhi'][i].to_numpy()
-                    charges = coords['pixelCharge'][i].to_numpy()
-                    simIDs = coords["pixelSimTrackID"][i].to_numpy()
-                    
-                    jetPt = coords['caloJetPt'][i]
-                    jetEta = coords['caloJetEta'][i]
-                    jetPhi = coords['caloJetPhi'][i]
+        tt = input("Train? y/n: ")
+        if tt=="y":
+            mva.train()
+            #train loop
+            #pdb.set_trace()
+            for epoch in range(500):
+                print("EPOCH {}".format(epoch)) 
+                for i in range(coords['caloJetPt'].to_numpy().shape[0]):
+                    if i%2==0:
+                        xvals = coords['pixelX'][i].to_numpy()
+                        yvals = coords['pixelY'][i].to_numpy()
+                        zvals = coords['pixelZ'][i].to_numpy()
+                        etavals = coords['pixelEta'][i].to_numpy()
+                        phivals= coords['pixelPhi'][i].to_numpy()
+                        charges = coords['pixelCharge'][i].to_numpy()
+                        simIDs = coords["pixelSimTrackID"][i].to_numpy()
+                        
+                        jetPt = coords['caloJetPt'][i]
+                        jetEta = coords['caloJetEta'][i]
+                        jetPhi = coords['caloJetPhi'][i]
 
-                    uniqueIDs = set(simIDs)
-                    nUniqueIDs = len(uniqueIDs)
+                        uniqueIDs = set(simIDs)
+                        nUniqueIDs = len(uniqueIDs)
 
-                    X = torch.from_numpy(np.vstack([xvals,yvals,zvals,etavals,phivals,charges]).T)
-                    X = X.to(torch.float32)
-                    Y = torch.from_numpy(simIDs)
-                    Y = Y.to(torch.float32)
+                        X = torch.from_numpy(np.vstack([xvals,yvals,zvals,etavals,phivals,charges]).T)
+                        X = X.to(torch.float32)
+                        Y = torch.from_numpy(simIDs)
+                        Y = Y.to(torch.float32)
 
-                opt.zero_grad()
-                pred = mva(X)
-                loss = lossfunc(pred,Y)
-                if i%100==0:
-                    print("epoch {} loss: {:.5f}".format(epoch,loss))
-                loss.backward()
-                opt.step()
+                        ##############
+                        #try to use KMeans clustering to move all 4 datapoints for each x together before passing through
+                        #that way data will be more clustered initially, have to worry less about pairwise ratio
+                        #can use this because we know there's 4 clusters already, ezpz
+                        kmeans = KMeans(n_clusters=4).fit(X[:,:3])
+                        centers = kmeans.cluster_centers_
+                        labels = kmeans.labels_
+                        u_lables = np.unique(labels)
+                        #subtract the cluster center of whatever cluster you belong to 
+                        xmod = []
+                        ymod = []
+                        zmod = []
+                        for l in range(len(u_lables)):
+                            xmod.append(xvals[labels == l] - centers[l][0])
+                            ymod.append(yvals[labels == l] - centers[l][1])
+                            zmod.append(zvals[labels == l] - centers[l][2])
+
+                        xmod = np.concatenate(xmod)
+                        ymod = np.concatenate(ymod)
+                        zmod = np.concatenate(zmod)
+
+                        rvals = np.sqrt(xvals**2+yvals**2) #maybe calc with xmod,ymod?
+                        thetavals = np.arctan2(yvals,xvals)
+
+                        Xmod = torch.from_numpy(np.vstack([xmod, ymod, zmod, etavals, phivals, charges]).T)
+                        Xmod = Xmod.to(torch.float32)
+                        ###########
 
 
-        #save model for later use
-        torch.save(mva, 'models/trained_mlp.pth')
+                    opt.zero_grad()
+                    pred = mva(Xmod)
+                    loss = lossfunc(pred,Y)
+                    if i%100==0:
+                        print("epoch {} loss: {:.5f}".format(epoch,loss))
+                    loss.backward()
+                    opt.step()
+
+
+            #save model for later use
+            torch.save(mva, 'models/trained_mlp.pth')
+        else:
+            #load model 
+        
+            mva = torch.load('models/trained_mlp.pth')
+            mva.eval()
+
 
         #test visualization
         i=5
@@ -118,7 +156,36 @@ def main():
         Y = torch.from_numpy(simIDs)
         Y = Y.to(torch.float32)
         
-        pred = mva(X)
+
+        ##############
+        #try to use KMeans clustering to move all 4 datapoints for each x together before passing through
+        #that way data will be more clustered initially, have to worry less about pairwise ratio
+        #can use this because we know there's 4 clusters already, ezpz
+        kmeans = KMeans(n_clusters=4).fit(X[:,:3])
+        centers = kmeans.cluster_centers_
+        labels = kmeans.labels_
+        u_lables = np.unique(labels)
+        #subtract the cluster center of whatever cluster you belong to 
+        xmod = []
+        ymod = []
+        zmod = []
+        for l in range(len(u_lables)):
+            xmod.append(xvals[labels == l] - centers[l][0])
+            ymod.append(yvals[labels == l] - centers[l][1])
+            zmod.append(zvals[labels == l] - centers[l][2])
+                    
+        xmod = np.concatenate(xmod)
+        ymod = np.concatenate(ymod)
+        zmod = np.concatenate(zmod)
+
+        rvals = np.sqrt(xvals**2+yvals**2) #maybe calc with xmod,ymod?
+        thetavals = np.arctan2(yvals,xvals)
+
+        Xmod = torch.from_numpy(np.vstack([xmod, ymod, zmod, rvals, thetavals, etavals, phivals, charges]).T)
+        Xmod = Xmod.to(torch.float32)
+        ##########
+
+        pred = mva(Xmod)
 
         colors = np.zeros(len(simIDs))
         for i,uniqueID in enumerate(uniqueIDs):
@@ -130,7 +197,7 @@ def main():
         
         #fig.tight_layout()
 
-        ax.scatter(xvals,yvals,zvals,c=colors,cmap="hsv")
+        ax.scatter(xmod,ymod,zmod,c=colors,cmap="hsv")
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         ax.set_zlabel("z")

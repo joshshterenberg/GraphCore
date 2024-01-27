@@ -5,14 +5,11 @@
 //
 /**\class DeepCoreNtuplizer DeepCoreNtuplizer.cc RecoTracker/DeepCoreTraining/plugins/DeepCoreNtuplizer.cc
 
-Description: [one line class summary]
+Description: Save inner tracker pixels in the cores of jets as pointclouds for OCToPi training
 
-Implementation:
-[Notes on implementation]
 */
 //
-// Original Author:  Valerio Bertacchi
-//         Created:  Fri, 09 Jul 2021 10:43:34 GMT
+// Adapted from Valerio Bertacchi's DeepCore Ntuplizer
 //
 //
 
@@ -75,12 +72,7 @@ Implementation:
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "CommonTools/UtilAlgos/interface/TFileService.h"
 
-//#include "SimG4Core/Notification/interface/G4SimTrack.h"
 #include "SimDataFormats/Track/interface/SimTrack.h"
-
-// #include "SimDataFormats/Vertex/interface/SimVertex.h"
-
-
 #include "Geometry/CommonDetUnit/interface/PixelGeomDetUnit.h"
 
 
@@ -134,9 +126,6 @@ class DeepCoreNtuplizer : public edm::stream::EDProducer<> {
         // ----------member data ---------------------------
 
         std::string propagatorName_;
-        //  edm::ESHandle<MagneticField>          magfield_;
-        //  edm::ESHandle<GlobalTrackingGeometry> geometry_.;
-        //  edm::ESHandle<Propagator>             propagator_;
 
         //Migration to ESGetToken from ESHandle
         edm::ESGetToken<MagneticField, IdealMagneticFieldRecord>          magfield_;
@@ -153,46 +142,22 @@ class DeepCoreNtuplizer : public edm::stream::EDProducer<> {
         edm::Handle<edmNew::DetSetVector<SiPixelCluster> > inputPixelClusters;
         edm::EDGetTokenT<edm::View<reco::Candidate> > cores_;
         edm::EDGetTokenT<std::vector<SimTrack> > simtracksToken;
-        edm::EDGetTokenT<std::vector<PSimHit> > PSimHitToken;
-        edm::Handle<std::vector<PSimHit> > simhits;
-        edm::EDGetTokenT<std::vector<PSimHit> > PSimHitECToken;
-        edm::Handle<std::vector<PSimHit> > simhitsEC;
-
 
 
         const std::vector<SimTrack> *simtracksVector;
-
-
         edm::EDGetTokenT<edm::DetSetVector<PixelDigiSimLink> > pdslToken;
         edm::Handle< edm::DetSetVector<PixelDigiSimLink> > PDSLContainer;
         const edm::DetSetVector<PixelDigiSimLink> *pixelSimLinks;
 
 
-
         double ptMin_;
         double pMin_;
+        double etaWhereBarrelEnds_;
         double deltaR_;
-        double chargeFracMin_;
-        double centralMIPCharge_;
         std::string pixelCPE_;
 
-        bool barrelTrain_;
-        bool endcapTrain_;
-        bool fullTrain_;
-
-
-
-
-
         std::pair<int,int> local2Pixel(double, double, const GeomDet*);
-
         LocalPoint pixel2Local(int, int, const GeomDet*);
-
-        // Pixel size fix:
-        // std::pair<bool,bool> pixel2Size(int, int, const GeomDet*);
-
-        void getSimTracksFromPixel(SiPixelCluster::Pixel pixel, unsigned int detId, std::vector<unsigned int> & uniqueSimTrackIds);
-        //int getOneSimTrackFromPixel(SiPixelCluster::Pixel pixel, unsigned int detId);
         std::tuple<int,int,float,float,float> getOneSimTrackFromPixel(SiPixelCluster::Pixel pixel, unsigned int detId);
 
 };
@@ -209,24 +174,19 @@ DeepCoreNtuplizer::DeepCoreNtuplizer(const edm::ParameterSet& iConfig) :
     pixelClusters_(consumes<edmNew::DetSetVector<SiPixelCluster> >(iConfig.getParameter<edm::InputTag>("pixelClusters"))),
     cores_(consumes<edm::View<reco::Candidate> >(iConfig.getParameter<edm::InputTag>("cores"))),
     simtracksToken(consumes<std::vector<SimTrack> >(iConfig.getParameter<edm::InputTag>("simTracks"))),
-    PSimHitToken(consumes<std::vector<PSimHit> >(iConfig.getParameter<edm::InputTag>("simHit"))),
-    PSimHitECToken(consumes<std::vector<PSimHit> >(iConfig.getParameter<edm::InputTag>("simHitEC"))),
     pdslToken(consumes<edm::DetSetVector<PixelDigiSimLink> >(iConfig.getParameter<edm::InputTag>("PixelDigiSimLinkVector"))),
     ptMin_(iConfig.getParameter<double>("ptMin")),
     pMin_(iConfig.getParameter<double>("pMin")),
+    etaWhereBarrelEnds_(iConfig.getParameter<double>("etaWhereBarrelEnds")),
     deltaR_(iConfig.getParameter<double>("deltaR")),
-    chargeFracMin_(iConfig.getParameter<double>("chargeFractionMin")),
-    centralMIPCharge_(iConfig.getParameter<double>("centralMIPCharge")),
-    pixelCPE_(iConfig.getParameter<std::string>("pixelCPE")),
-    barrelTrain_(iConfig.getParameter<bool>("barrelTrain")),
-    endcapTrain_(iConfig.getParameter<bool>("endcapTrain")),
-    fullTrain_(iConfig.getParameter<bool>("fullTrain"))
+    pixelCPE_(iConfig.getParameter<std::string>("pixelCPE"))
 {
 
     //  usesResource("TFileService");
     edm::Service<TFileService> fileService;
 
     DeepCoreNtuplizerTree= fileService->make<TTree>("tree","tree");
+    DeepCoreNtuplizerTree->SetAutoSave(0);
     
     //Global variables
     DeepCoreNtuplizerTree->Branch("event",&eventID);
@@ -298,8 +258,6 @@ void DeepCoreNtuplizer::produce(edm::Event& iEvent, const edm::EventSetup& iSetu
     Handle<std::vector<reco::Vertex> > vertices;
     iEvent.getByToken(vertices_, vertices);
 
-    iEvent.getByToken(PSimHitToken, simhits);
-    iEvent.getByToken(PSimHitECToken, simhitsEC);
 
 
     Handle<edm::View<reco::Candidate> > cores;
@@ -321,12 +279,11 @@ void DeepCoreNtuplizer::produce(edm::Event& iEvent, const edm::EventSetup& iSetu
 
 
 
-    //Go go graphcore!
-    //edmNew::DetSetVector<SiPixelCluster>::const_iterator clusterDetSetVecItr = inputPixelClusters->begin();
+    //Go OCToPi
 
     for (unsigned int jetIdx = 0; jetIdx < cores->size(); jetIdx++) { //loop jet
         const reco::Candidate& jet = (*cores)[jetIdx];
-        if ((jet.pt() > ptMin_ && std::abs(jet.eta())< 1.8) || (jet.p()>ptMin_ && std::abs(jet.eta())>1.8)) { 
+        if ((jet.pt() > ptMin_ && std::abs(jet.eta())< etaWhereBarrelEnds_) || (jet.p()>pMin_ && std::abs(jet.eta())>etaWhereBarrelEnds_)) { 
             caloJetP = jet.p();
             caloJetPt = jet.pt();
             caloJetEta = jet.eta();
@@ -411,35 +368,6 @@ void DeepCoreNtuplizer::produce(edm::Event& iEvent, const edm::EventSetup& iSetu
     }
 }
 
-void DeepCoreNtuplizer::getSimTracksFromPixel(SiPixelCluster::Pixel pixel, unsigned int detId, std::vector<unsigned int> & uniqueSimTrackIds){
-    
-    //find all simtracks depositing charge in pixel (usually only one)
-    auto firstLink = pixelSimLinks->find(detId);
-    if(firstLink != pixelSimLinks->end()){
-        auto link_detset = (*firstLink);
-        for(auto linkiter : link_detset.data){
-            std::pair<int,int> pos = PixelDigi::channelToPixel(linkiter.channel());
-
-            if(pos.first == pixel.x && pos.second == pixel.y){
-                std::cout << " fraction " << linkiter.fraction() << std::endl;
-                for(auto iter = simtracksVector->begin(); iter != simtracksVector->end(); ++iter){
-                    
-                    if(iter->trackId() == linkiter.SimTrackId() && iter->momentum().P()>0.2 && iter->momentum().Pt()<99999){ 
-                        bool isNew = true;
-                        for(auto iD : uniqueSimTrackIds){
-                            if(iD==(unsigned int)(iter->trackId())) isNew=false;
-                        }
-                        if(isNew){
-                            uniqueSimTrackIds.push_back((unsigned int)(iter->trackId()));
-                            std::cout << "SimTrack pdgId: " << iter->type() << " unique ID: " << iter->trackId()  << std::endl;
-                            //simTrackPDGIds.push_back((signed int) iter->pdgId());
-                        }
-                    }
-                }
-            }
-        }
-    } 
-}
 
 std::tuple<int,int,float,float,float> DeepCoreNtuplizer::getOneSimTrackFromPixel(SiPixelCluster::Pixel pixel, unsigned int detId){
     
@@ -453,7 +381,6 @@ std::tuple<int,int,float,float,float> DeepCoreNtuplizer::getOneSimTrackFromPixel
      
     //store simtrack ID with greatest charge in pixel
     float maxChargeFraction=0.0;
-    //int maxChargeSimTrackID=0;
     auto firstLink = pixelSimLinks->find(detId);
     if(firstLink != pixelSimLinks->end()){
         auto link_detset = (*firstLink);
@@ -509,17 +436,11 @@ void DeepCoreNtuplizer::fillDescriptions(edm::ConfigurationDescriptions& descrip
     desc.add<edm::InputTag>("pixelClusters", edm::InputTag("siPixelClustersPreSplitting"));
     desc.add<edm::InputTag>("cores", edm::InputTag("ak4CaloJets"));
     desc.add<edm::InputTag>("simTracks", edm::InputTag("g4SimHits"));
-    desc.add<edm::InputTag>("simHit", edm::InputTag("TrackerHitsPixelBarrelLowTof"));
-    desc.add<edm::InputTag>("simHitEC", edm::InputTag("TrackerHitsPixelEndcapLowTof"));
     desc.add<double>("ptMin", 250);
-    desc.add<double>("pMin", 0);
+    desc.add<double>("pMin", 250);
+    desc.add<double>("etaWhereBarrelEnds", 1.8);
     desc.add<double>("deltaR", 0.1);
-    desc.add<double>("centralMIPCharge", 18000.0);
-    desc.add<double>("chargeFractionMin", 2);
     desc.add<std::string>("pixelCPE", "PixelCPEGeneric");
-    desc.add<bool>("barrelTrain", true);
-    desc.add<bool>("endcapTrain", false);
-    desc.add<bool>("fullTrain", false);
     desc.setUnknown();
     descriptions.addDefault(desc);
 }

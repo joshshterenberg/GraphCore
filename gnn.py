@@ -21,6 +21,8 @@ class GCN(nn.Module):
         self.conv1 = geonn.GCNConv(self.d, 25)         
         self.conv2 = geonn.GCNConv(25, 25)
         self.conv3 = geonn.GCNConv(25, 25)
+        self.conv4 = geonn.GCNConv(25, 25)
+        self.conv5 = geonn.GCNConv(25, 25)
         self.classifier = nn.Linear(25, self.d)
 
     def forward(self, x, edge_index):
@@ -29,6 +31,10 @@ class GCN(nn.Module):
         h = self.conv2(h, edge_index)         
         h = h.relu()         
         h = self.conv3(h, edge_index)         
+        h = h.relu() #pooling here?
+        h = self.conv4(h, edge_index)         
+        h = h.relu() #pooling here?
+        h = self.conv5(h, edge_index)         
         h = h.relu() #pooling here?
         out = self.classifier(h)         
         return out#, h
@@ -50,54 +56,62 @@ def main():
         opt = torch.optim.SGD(mva.parameters(),lr=.001,momentum=0.5)
         opt = torch.optim.Adam(mva.parameters(),lr=.001)
         lossfunc = losses.ContrastiveLoss()
+       
+        tt = input("Train? y/n: ")
+        if tt=="y":
+            model.train() #training constitutes learning object condensation
+
+            for epoch in range(500): ##S_EDIT change to 500
+                print("EPOCH {}".format(epoch)) 
+                for i in range(coords['caloJetPt'].to_numpy().shape[0]):
+                    if i%2==0:
+                        xvals = coords['pixelX'][i].to_numpy()
+                        yvals = coords['pixelY'][i].to_numpy()
+                        zvals = coords['pixelZ'][i].to_numpy()
+                        etavals = coords['pixelEta'][i].to_numpy()
+                        phivals= coords['pixelPhi'][i].to_numpy()
+                        charges = coords['pixelCharge'][i].to_numpy()
+                        simIDs = coords["pixelSimTrackID"][i].to_numpy()
+                                
+                        jetPt = coords['caloJetPt'][i]
+                        jetEta = coords['caloJetEta'][i]
+                        jetPhi = coords['caloJetPhi'][i]
+    
+                        uniqueIDs = set(simIDs)
+                        nUniqueIDs = len(uniqueIDs)
+    
+                        X = torch.from_numpy(np.vstack([xvals,yvals,zvals,etavals,phivals,charges]).T)
+                        X = X.to(torch.float32)
+                        Y = torch.from_numpy(simIDs)
+                        Y = Y.to(torch.float32)
+    
+                        #push data through model
+                        with torch.no_grad():
+                            latent = mva(X)
+                        
+                        #implement knn graph with max radius (arbitrarily 0.01 for now)
+                        edge_index = geonn.knn_graph(latent, k=4)
+                        #dists = (latent[edge_index[0]] - latent[edge_index[1]]).norm(dim=-1)
+                        #edge_index = edge_index[:, dists < 0.01]
+    
+
+                    opt.zero_grad()
+                    pred = model(latent, edge_index)
+                    loss = lossfunc(pred,Y)
+                    if i%100==0:
+                        print("epoch {} loss: {:.5f}".format(epoch,loss))
+                    loss.backward()
+                    opt.step()
+
+
+            #save model for later
+            torch.save(model, "models/trained_gnn.pth")
+
+        else:
+            #load model 
         
-        model.train() #training constitutes learning object condensation
-
-        for epoch in range(500): ##S_EDIT change to 500
-            print("EPOCH {}".format(epoch)) 
-            for i in range(coords['caloJetPt'].to_numpy().shape[0]):
-                if i%2==0:
-                    xvals = coords['pixelX'][i].to_numpy()
-                    yvals = coords['pixelY'][i].to_numpy()
-                    zvals = coords['pixelZ'][i].to_numpy()
-                    etavals = coords['pixelEta'][i].to_numpy()
-                    phivals= coords['pixelPhi'][i].to_numpy()
-                    charges = coords['pixelCharge'][i].to_numpy()
-                    simIDs = coords["pixelSimTrackID"][i].to_numpy()
-                            
-                    jetPt = coords['caloJetPt'][i]
-                    jetEta = coords['caloJetEta'][i]
-                    jetPhi = coords['caloJetPhi'][i]
-    
-                    uniqueIDs = set(simIDs)
-                    nUniqueIDs = len(uniqueIDs)
-    
-                    X = torch.from_numpy(np.vstack([xvals,yvals,zvals,etavals,phivals,charges]).T)
-                    X = X.to(torch.float32)
-                    Y = torch.from_numpy(simIDs)
-                    Y = Y.to(torch.float32)
-    
-                    #push data through model
-                    with torch.no_grad():
-                        latent = mva(X)
-                    
-                    #implement knn graph with max radius (arbitrarily 0.01 for now)
-                    edge_index = geonn.knn_graph(latent, k=8)
-                    dists = (latent[edge_index[0]] - latent[edge_index[1]]).norm(dim=-1)
-                    edge_index = edge_index[:, dists < 0.01]
-    
-
-                opt.zero_grad()
-                pred = model(latent, edge_index)
-                loss = lossfunc(pred,Y)
-                if i%100==0:
-                    print("epoch {} loss: {:.5f}".format(epoch,loss))
-                loss.backward()
-                opt.step()
-
-
-        #save model for later
-        torch.save(model, "models/trained_gnn.pth")
+            model = torch.load('models/trained_gnn.pth')
+            model.eval()
 
                 
         #test visualization, same as in mlp
@@ -128,9 +142,9 @@ def main():
             latent = mva(X)
                     
         #implement knn graph with max radius (arbitrarily 0.01 for now)
-        edge_index = geonn.knn_graph(latent, k=8)
-        dists = (latent[edge_index[0]] - latent[edge_index[1]]).norm(dim=-1)
-        edge_index = edge_index[:, dists < 0.01]
+        edge_index = geonn.knn_graph(latent, k=4)
+        #dists = (latent[edge_index[0]] - latent[edge_index[1]]).norm(dim=-1)
+        #edge_index = edge_index[:, dists < 0.01]
 
         pred = model(latent, edge_index)
 

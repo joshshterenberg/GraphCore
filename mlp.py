@@ -44,6 +44,30 @@ class Net(nn.Module):
         return x 
 
 
+def k_means_mod(X):
+    kmeans = KMeans(n_clusters=4).fit(X[:,:3])
+    centers = kmeans.cluster_centers_
+    labels = kmeans.labels_
+    u_lables = np.unique(labels)
+    xmod = []
+    ymod = []
+    zmod = []
+    for l in range(len(u_lables)):
+        xmod.append(xvals[labels == l] - centers[l][0])
+        ymod.append(yvals[labels == l] - centers[l][1])
+        zmod.append(zvals[labels == l] - centers[l][2])
+
+    xmod = np.concatenate(xmod)
+    ymod = np.concatenate(ymod)
+    zmod = np.concatenate(zmod)
+
+    Xmod = torch.from_numpy(np.vstack([xmod, ymod, zmod, etavals, phivals, charges]).T)
+    Xmod = Xmod.to(torch.float32)
+    return Xmod
+
+
+
+
 def main():
     with uproot.open("GraphCoreNtuples.root") as f:
         tree=f['ntuples/tree']
@@ -87,37 +111,11 @@ def main():
                         Y = torch.from_numpy(simIDs)
                         Y = Y.to(torch.float32)
 
-                        ##############
-                        #try to use KMeans clustering to move all 4 datapoints for each x together before passing through
-                        #that way data will be more clustered initially, have to worry less about pairwise ratio
-                        #can use this because we know there's 4 clusters already, ezpz
-                        kmeans = KMeans(n_clusters=4).fit(X[:,:3])
-                        centers = kmeans.cluster_centers_
-                        labels = kmeans.labels_
-                        u_lables = np.unique(labels)
-                        #subtract the cluster center of whatever cluster you belong to 
-                        xmod = []
-                        ymod = []
-                        zmod = []
-                        for l in range(len(u_lables)):
-                            xmod.append(xvals[labels == l] - centers[l][0])
-                            ymod.append(yvals[labels == l] - centers[l][1])
-                            zmod.append(zvals[labels == l] - centers[l][2])
-
-                        xmod = np.concatenate(xmod)
-                        ymod = np.concatenate(ymod)
-                        zmod = np.concatenate(zmod)
-
-                        rvals = np.sqrt(xvals**2+yvals**2) #maybe calc with xmod,ymod?
-                        thetavals = np.arctan2(yvals,xvals)
-
-                        Xmod = torch.from_numpy(np.vstack([xmod, ymod, zmod, etavals, phivals, charges]).T)
-                        Xmod = Xmod.to(torch.float32)
-                        ###########
+                        #try shifting each point given tracker layer in tree
 
 
                     opt.zero_grad()
-                    pred = mva(Xmod)
+                    pred = mva(X) #Xmod
                     loss = lossfunc(pred,Y)
                     if i%100==0:
                         print("epoch {} loss: {:.5f}".format(epoch,loss))
@@ -157,35 +155,7 @@ def main():
         Y = Y.to(torch.float32)
         
 
-        ##############
-        #try to use KMeans clustering to move all 4 datapoints for each x together before passing through
-        #that way data will be more clustered initially, have to worry less about pairwise ratio
-        #can use this because we know there's 4 clusters already, ezpz
-        kmeans = KMeans(n_clusters=4).fit(X[:,:3])
-        centers = kmeans.cluster_centers_
-        labels = kmeans.labels_
-        u_lables = np.unique(labels)
-        #subtract the cluster center of whatever cluster you belong to 
-        xmod = []
-        ymod = []
-        zmod = []
-        for l in range(len(u_lables)):
-            xmod.append(xvals[labels == l] - centers[l][0])
-            ymod.append(yvals[labels == l] - centers[l][1])
-            zmod.append(zvals[labels == l] - centers[l][2])
-                    
-        xmod = np.concatenate(xmod)
-        ymod = np.concatenate(ymod)
-        zmod = np.concatenate(zmod)
-
-        rvals = np.sqrt(xvals**2+yvals**2) #maybe calc with xmod,ymod?
-        thetavals = np.arctan2(yvals,xvals)
-
-        Xmod = torch.from_numpy(np.vstack([xmod, ymod, zmod, rvals, thetavals, etavals, phivals, charges]).T)
-        Xmod = Xmod.to(torch.float32)
-        ##########
-
-        pred = mva(Xmod)
+        pred = mva(X)
 
         colors = np.zeros(len(simIDs))
         for i,uniqueID in enumerate(uniqueIDs):
@@ -197,7 +167,7 @@ def main():
         
         #fig.tight_layout()
 
-        ax.scatter(xmod,ymod,zmod,c=colors,cmap="hsv")
+        ax.scatter(xvals,yvals,zvals,c=colors,cmap="hsv")
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         ax.set_zlabel("z")

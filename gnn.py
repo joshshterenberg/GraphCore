@@ -1,4 +1,5 @@
 import uproot
+import os
 import matplotlib.pyplot as plt 
 import sys
 import pdb 
@@ -41,144 +42,79 @@ class GCN(nn.Module):
 
 
 def main():
-    with uproot.open("GraphCoreNtuples.root") as f:
-        tree = f['ntuples/tree']
-        coords = tree.arrays()
-        n=1
-    
-        #load mlp
-        mva = torch.load('models/trained_mlp.pth')
-        mva.eval()
 
-        #define GNN
-        model = GCN(d=3) #d must match mlp 
+    directory_path = 'QCDJan26/'
+
+    for filename in os.listdir(directory_path): ##next 3 lines modify for all files in folder PATH
+        if os.path.isfile(os.path.join(directory_path, filename)) and filename.endswith('.root'):
+            with uproot.open(os.path.join(directory_path, filename)) as f:
+            #with uproot.open("GraphCoreNtuples.root") as f:
+
+                tree = f['ntuples/tree']
+                coords = tree.arrays()
+                n=1
+            
+                #load mlp
+                mva = torch.load('models/trained_mlp.pth')
+                mva.eval()
         
-        opt = torch.optim.SGD(mva.parameters(),lr=.001,momentum=0.5)
-        opt = torch.optim.Adam(mva.parameters(),lr=.001)
-        lossfunc = losses.ContrastiveLoss()
-       
-        tt = input("Train? y/n: ")
-        if tt=="y":
-            model.train() #training constitutes learning object condensation
-
-            for epoch in range(500): ##S_EDIT change to 500
-                print("EPOCH {}".format(epoch)) 
-                for i in range(coords['caloJetPt'].to_numpy().shape[0]):
-                    if i%2==0:
-                        xvals = coords['pixelX'][i].to_numpy()
-                        yvals = coords['pixelY'][i].to_numpy()
-                        zvals = coords['pixelZ'][i].to_numpy()
-                        etavals = coords['pixelEta'][i].to_numpy()
-                        phivals= coords['pixelPhi'][i].to_numpy()
-                        charges = coords['pixelCharge'][i].to_numpy()
-                        simIDs = coords["pixelSimTrackID"][i].to_numpy()
-                                
-                        jetPt = coords['caloJetPt'][i]
-                        jetEta = coords['caloJetEta'][i]
-                        jetPhi = coords['caloJetPhi'][i]
-    
-                        uniqueIDs = set(simIDs)
-                        nUniqueIDs = len(uniqueIDs)
-    
-                        X = torch.from_numpy(np.vstack([xvals,yvals,zvals,etavals,phivals,charges]).T)
-                        X = X.to(torch.float32)
-                        Y = torch.from_numpy(simIDs)
-                        Y = Y.to(torch.float32)
-    
-                        #push data through model
-                        with torch.no_grad():
-                            latent = mva(X)
-                        
-                        #implement knn graph with max radius (arbitrarily 0.01 for now)
-                        edge_index = geonn.knn_graph(latent, k=4)
-                        #dists = (latent[edge_index[0]] - latent[edge_index[1]]).norm(dim=-1)
-                        #edge_index = edge_index[:, dists < 0.01]
-    
-
-                    opt.zero_grad()
-                    pred = model(latent, edge_index)
-                    loss = lossfunc(pred,Y)
-                    if i%100==0:
-                        print("epoch {} loss: {:.5f}".format(epoch,loss))
-                    loss.backward()
-                    opt.step()
-
-
-            #save model for later
-            torch.save(model, "models/trained_gnn.pth")
-
-        else:
-            #load model 
-        
-            model = torch.load('models/trained_gnn.pth')
-            model.eval()
-
+                #define GNN
+                model = GCN(d=3) #d must match mlp 
                 
-        #test visualization, same as in mlp
-        i=5
-        xvals = coords['pixelX'][i].to_numpy()
-        yvals = coords['pixelY'][i].to_numpy()
-        zvals = coords['pixelZ'][i].to_numpy()
-        etavals = coords['pixelEta'][i].to_numpy()
-        phivals= coords['pixelPhi'][i].to_numpy()
-        charges = coords['pixelCharge'][i].to_numpy()
-        simIDs = coords["pixelSimTrackID"][i].to_numpy()
+                opt = torch.optim.SGD(mva.parameters(),lr=.001,momentum=0.5)
+                opt = torch.optim.Adam(mva.parameters(),lr=.001)
+                lossfunc = losses.ContrastiveLoss()
+               
+                model.train() #training constitutes learning object condensation
         
-        jetPt = coords['caloJetPt'][i]
-        jetEta = coords['caloJetEta'][i]
-        jetPhi = coords['caloJetPhi'][i]
-
-        uniqueIDs = set(simIDs)
-        nUniqueIDs = len(uniqueIDs)
-
-        X = torch.from_numpy(np.vstack([xvals,yvals,zvals,etavals,phivals,charges]).T)
-        X = X.to(torch.float32)
-        Y = torch.from_numpy(simIDs)
-        Y = Y.to(torch.float32)
-       
-
-        #push data through model
-        with torch.no_grad():
-            latent = mva(X)
-                    
-        #implement knn graph with max radius (arbitrarily 0.01 for now)
-        edge_index = geonn.knn_graph(latent, k=4)
-        #dists = (latent[edge_index[0]] - latent[edge_index[1]]).norm(dim=-1)
-        #edge_index = edge_index[:, dists < 0.01]
-
-        pred = model(latent, edge_index)
-
-        colors = np.zeros(len(simIDs))
-        for i,uniqueID in enumerate(uniqueIDs):
-            colors[simIDs==uniqueID]=i/(nUniqueIDs+1.0)
+                for epoch in range(500): ##S_EDIT change to 500
+                    print("EPOCH {}".format(epoch)) 
+                    for i in range(coords['caloJetPt'].to_numpy().shape[0]):
+                        if i%2==0:
+                            xvals = coords['pixelX'][i].to_numpy()
+                            yvals = coords['pixelY'][i].to_numpy()
+                            zvals = coords['pixelZ'][i].to_numpy()
+                            etavals = coords['pixelEta'][i].to_numpy()
+                            phivals= coords['pixelPhi'][i].to_numpy()
+                            charges = coords['pixelCharge'][i].to_numpy()
+                            simIDs = coords["pixelSimTrackID"][i].to_numpy()
+                                    
+                            jetPt = coords['caloJetPt'][i]
+                            jetEta = coords['caloJetEta'][i]
+                            jetPhi = coords['caloJetPhi'][i]
+            
+                            uniqueIDs = set(simIDs)
+                            nUniqueIDs = len(uniqueIDs)
+            
+                            X = torch.from_numpy(np.vstack([xvals,yvals,zvals,etavals,phivals,charges]).T)
+                            X = X.to(torch.float32)
+                            Y = torch.from_numpy(simIDs)
+                            Y = Y.to(torch.float32)
+            
+                            #push data through model
+                            with torch.no_grad():
+                                latent = mva(X)
+                            
+                            #implement knn graph with max radius (arbitrarily 0.01 for now)
+                            edge_index = geonn.knn_graph(latent, k=4)
+                            #dists = (latent[edge_index[0]] - latent[edge_index[1]]).norm(dim=-1)
+                            #edge_index = edge_index[:, dists < 0.01]
+            
         
-
-        fig=plt.figure(constrained_layout=True)
-        ax=fig.add_subplot(121,projection='3d')
+                        opt.zero_grad()
+                        pred = model(latent, edge_index)
+                        loss = lossfunc(pred,Y)
+                        if i%100==0:
+                            print("epoch {} loss: {:.5f}".format(epoch,loss))
+                        loss.backward()
+                        opt.step()
         
-        #fig.tight_layout()
-
-        ax.scatter(latent[:,0].detach().numpy(),latent[:,1].detach().numpy(),latent[:,2].detach().numpy(),c=colors,cmap="hsv")
-        ax.set_xlabel("v1")
-        ax.set_ylabel("v2")
-        ax.set_zlabel("v3")
         
-        fig.suptitle("Pixels in Jet by SimTrack",fontsize=18,weight='bold')
-        ax.set_title("Learned Representation")
-
-        ax2=fig.add_subplot(122,projection='3d')
-        ax2.scatter(pred[:,0].detach().numpy(),pred[:,1].detach().numpy(),pred[:,2].detach().numpy(),c=colors,cmap="hsv")
-        ax2.set_title("Post-Object Condensation Representation")
-        #ax2=fig.add_subplot(122)
-        #ax2.scatter(pred[:,0].detach().numpy(),pred[:,1].detach().numpy(),c=colors,cmap="hsv")
-        ax2.set_xlabel("v1")
-        ax2.set_ylabel("v2")
-        ax2.set_zlabel("v3")
-
-        x = input("Show sample graph? y/n")
-        if x=="y": plt.show()
-    
-    
+    #save model for later
+    torch.save(model, "models/trained_gnn.pth")
+        
+                        
+            
 if __name__=="__main__":
     main()
-    
+            

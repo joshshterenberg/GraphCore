@@ -1,4 +1,5 @@
 import uproot
+import os
 import matplotlib.pyplot as plt
 import sys
 import pdb
@@ -69,123 +70,68 @@ def k_means_mod(X):
 
 
 def main():
-    with uproot.open("GraphCoreNtuples.root") as f:
-        tree=f['ntuples/tree']
-        #plot one jet core
-        n=1
 
-        mva = Net(d=6) ## with xmod set, without should be 6
-        
-        opt = torch.optim.SGD(mva.parameters(),lr=.001,momentum=0.5)
-        opt = torch.optim.Adam(mva.parameters(),lr=.001)
-        lossfunc = losses.ContrastiveLoss()
-        
-        coords = tree.arrays()#,entry_start=n,entry_stop=n+1) 
+    directory_path = 'QCDJan26/'
 
-        tt = input("Train? y/n: ")
-        if tt=="y":
-            mva.train()
-            #train loop
-            #pdb.set_trace()
-            for epoch in range(500):
-                print("EPOCH {}".format(epoch)) 
-                for i in range(coords['caloJetPt'].to_numpy().shape[0]):
-                    if i%2==0:
-                        xvals = coords['pixelX'][i].to_numpy()
-                        yvals = coords['pixelY'][i].to_numpy()
-                        zvals = coords['pixelZ'][i].to_numpy()
-                        etavals = coords['pixelEta'][i].to_numpy()
-                        phivals= coords['pixelPhi'][i].to_numpy()
-                        charges = coords['pixelCharge'][i].to_numpy()
-                        simIDs = coords["pixelSimTrackID"][i].to_numpy()
-                        
-                        jetPt = coords['caloJetPt'][i]
-                        jetEta = coords['caloJetEta'][i]
-                        jetPhi = coords['caloJetPhi'][i]
+    for filename in os.listdir(directory_path): ##next 3 lines modify for all files in folder PATH
+        if os.path.isfile(os.path.join(directory_path, filename)) and filename.endswith('.root'):
+            with uproot.open(os.path.join(directory_path, filename)) as f:
+            #with uproot.open("GraphCoreNtuples.root") as f:
 
-                        uniqueIDs = set(simIDs)
-                        nUniqueIDs = len(uniqueIDs)
+                tree=f['ntuples/tree']
+                #plot one jet core
+                n=1
 
-                        X = torch.from_numpy(np.vstack([xvals,yvals,zvals,etavals,phivals,charges]).T)
-                        X = X.to(torch.float32)
-                        Y = torch.from_numpy(simIDs)
-                        Y = Y.to(torch.float32)
+                mva = Net(d=6) ## with xmod set, without should be 6
+                
+                opt = torch.optim.SGD(mva.parameters(),lr=.001,momentum=0.5)
+                opt = torch.optim.Adam(mva.parameters(),lr=.001)
+                lossfunc = losses.ContrastiveLoss()
+                
+                coords = tree.arrays()#,entry_start=n,entry_stop=n+1) 
 
-                        #try shifting each point given tracker layer in tree
+                mva.train()
+                #train loop
+                #pdb.set_trace()
+                for epoch in range(500):
+                    print("EPOCH {}".format(epoch)) 
+                    for i in range(coords['caloJetPt'].to_numpy().shape[0]):
+                        if i%2==0:
+                            xvals = coords['pixelX'][i].to_numpy()
+                            yvals = coords['pixelY'][i].to_numpy()
+                            zvals = coords['pixelZ'][i].to_numpy()
+                            etavals = coords['pixelEta'][i].to_numpy()
+                            phivals= coords['pixelPhi'][i].to_numpy()
+                            charges = coords['pixelCharge'][i].to_numpy()
+                            simIDs = coords["pixelSimTrackID"][i].to_numpy()
+                                
+                            jetPt = coords['caloJetPt'][i]
+                            jetEta = coords['caloJetEta'][i]
+                            jetPhi = coords['caloJetPhi'][i]
 
+                            uniqueIDs = set(simIDs)
+                            nUniqueIDs = len(uniqueIDs)
 
-                    opt.zero_grad()
-                    pred = mva(X) #Xmod
-                    loss = lossfunc(pred,Y)
-                    if i%100==0:
-                        print("epoch {} loss: {:.5f}".format(epoch,loss))
-                    loss.backward()
-                    opt.step()
+                            X = torch.from_numpy(np.vstack([xvals,yvals,zvals,etavals,phivals,charges]).T)
+                            X = X.to(torch.float32)
+                            Y = torch.from_numpy(simIDs)
+                            Y = Y.to(torch.float32)
+
+                            #try shifting each point given tracker layer in tree
 
 
-            #save model for later use
-            torch.save(mva, 'models/trained_mlp.pth')
-        else:
-            #load model 
-        
-            mva = torch.load('models/trained_mlp.pth')
-            mva.eval()
+                        opt.zero_grad()
+                        pred = mva(X) #Xmod
+                        loss = lossfunc(pred,Y)
+                        if i%100==0:
+                            print("epoch {} loss: {:.5f}".format(epoch,loss))
+                        loss.backward()
+                        opt.step()
 
 
-        #test visualization
-        i=5
-        xvals = coords['pixelX'][i].to_numpy()
-        yvals = coords['pixelY'][i].to_numpy()
-        zvals = coords['pixelZ'][i].to_numpy()
-        etavals = coords['pixelEta'][i].to_numpy()
-        phivals= coords['pixelPhi'][i].to_numpy()
-        charges = coords['pixelCharge'][i].to_numpy()
-        simIDs = coords["pixelSimTrackID"][i].to_numpy()
-        
-        jetPt = coords['caloJetPt'][i]
-        jetEta = coords['caloJetEta'][i]
-        jetPhi = coords['caloJetPhi'][i]
+    #save model for later use
+    torch.save(mva, 'models/trained_mlp.pth')
 
-        uniqueIDs = set(simIDs)
-        nUniqueIDs = len(uniqueIDs)
-
-        X = torch.from_numpy(np.vstack([xvals,yvals,zvals,etavals,phivals,charges]).T)
-        X = X.to(torch.float32)
-        Y = torch.from_numpy(simIDs)
-        Y = Y.to(torch.float32)
-        
-
-        pred = mva(X)
-
-        colors = np.zeros(len(simIDs))
-        for i,uniqueID in enumerate(uniqueIDs):
-            colors[simIDs==uniqueID]=i/(nUniqueIDs+1.0)
-        
-
-        fig=plt.figure(constrained_layout=True)
-        ax=fig.add_subplot(121,projection='3d')
-        
-        #fig.tight_layout()
-
-        ax.scatter(xvals,yvals,zvals,c=colors,cmap="hsv")
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        ax.set_zlabel("z")
-        
-        fig.suptitle("Pixels in Jet by SimTrack",fontsize=18,weight='bold')
-        ax.set_title("Jet pT: {:.0f} GeV, $\eta$: {:.2f}, $\phi$: {:.2f}\n {} Pixels, {} SimTracks".format(jetPt,jetEta,jetPhi,len(xvals),nUniqueIDs),fontsize=18)
-
-        ax2=fig.add_subplot(122,projection='3d')
-        ax2.scatter(pred[:,0].detach().numpy(),pred[:,1].detach().numpy(),pred[:,2].detach().numpy(),c=colors,cmap="hsv")
-        ax2.set_title("Learned Representation")
-        #ax2=fig.add_subplot(122)
-        #ax2.scatter(pred[:,0].detach().numpy(),pred[:,1].detach().numpy(),c=colors,cmap="hsv")
-        ax2.set_xlabel("v1")
-        ax2.set_ylabel("v2")
-        ax2.set_zlabel("v3")
-
-        x = input("Show sample graph? y/n")
-        if x=="y": plt.show()
 
 
 if __name__ == "__main__":

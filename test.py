@@ -21,6 +21,9 @@ from sklearn.cluster import DBSCAN, KMeans, SpectralClustering
 
 def main():
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
+    
     directory_path = 'QCDJan26/'
 
     test_filename = input("Filename: ")

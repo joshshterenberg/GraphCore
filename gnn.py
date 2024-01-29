@@ -43,6 +43,9 @@ class GCN(nn.Module):
 
 def main():
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
+
     directory_path = 'QCDJan26/'
 
     for filename in os.listdir(directory_path): ##next 3 lines modify for all files in folder PATH
@@ -59,7 +62,7 @@ def main():
                 mva.eval()
         
                 #define GNN
-                model = GCN(d=3) #d must match mlp 
+                model = GCN(d=3).to(device) #d must match mlp 
                 
                 opt = torch.optim.SGD(mva.parameters(),lr=.001,momentum=0.5)
                 opt = torch.optim.Adam(mva.parameters(),lr=.001)
@@ -89,7 +92,7 @@ def main():
                             X = torch.from_numpy(np.vstack([xvals,yvals,zvals,etavals,phivals,charges]).T)
                             X = X.to(torch.float32)
                             Y = torch.from_numpy(simIDs)
-                            Y = Y.to(torch.float32)
+                            Y = Y.to(torch.float32).to(device)
             
                             #push data through model
                             with torch.no_grad():
@@ -102,7 +105,7 @@ def main():
             
         
                         opt.zero_grad()
-                        pred = model(latent, edge_index)
+                        pred = model(latent.to(device), edge_index.to(device))
                         loss = lossfunc(pred,Y)
                         if i%100==0:
                             print("epoch {} loss: {:.5f}".format(epoch,loss))

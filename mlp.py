@@ -71,6 +71,9 @@ def k_means_mod(X):
 
 def main():
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
+
     directory_path = 'QCDJan26/'
 
     for filename in os.listdir(directory_path): ##next 3 lines modify for all files in folder PATH
@@ -82,7 +85,7 @@ def main():
                 #plot one jet core
                 n=1
 
-                mva = Net(d=6) ## with xmod set, without should be 6
+                mva = Net(d=6).to(device) ## with xmod set, without should be 6
                 
                 opt = torch.optim.SGD(mva.parameters(),lr=.001,momentum=0.5)
                 opt = torch.optim.Adam(mva.parameters(),lr=.001)
@@ -113,9 +116,9 @@ def main():
                             nUniqueIDs = len(uniqueIDs)
 
                             X = torch.from_numpy(np.vstack([xvals,yvals,zvals,etavals,phivals,charges]).T)
-                            X = X.to(torch.float32)
+                            X = X.to(torch.float32).to(device)
                             Y = torch.from_numpy(simIDs)
-                            Y = Y.to(torch.float32)
+                            Y = Y.to(torch.float32).to(device)
 
                             #try shifting each point given tracker layer in tree
 

@@ -1,0 +1,5 @@
+
+
+
+Submit job: condor_submit submit.sub
+Monitor job: condor_wait -status job_number.log

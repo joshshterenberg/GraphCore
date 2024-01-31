@@ -6,12 +6,65 @@ import pdb
 import numpy as np
 from itertools import cycle
 
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_metric_learning import distances, losses, miners, reducers, testers 
 
 from sklearn.cluster import DBSCAN, KMeans, SpectralClustering
+
+from torch.utils.data.dataset import Dataset
+from torch.utils.data import DataLoader
+
+import time
+import glob
+
+
+
+def read_root(filename,treename,branches):
+    #read single root file to memory
+    with uproot.open(filename) as f:
+        tree = f[treename]
+        output = tree.arrays(branches)
+        return output
+
+
+class OctopiDataset(Dataset):
+    def __init__(self,filelist,featureBranches,labelBranch,batchsize):
+        import awkward as ak
+        self.filelist = filelist
+        self.featureBranches = featureBranches
+        self.labelBranch = labelBranch
+        self.batchsize = batchsize
+
+        
+        #read everything into memory '_'
+        self.input_array = ak.Array([])
+        #self.input_list = []
+        print("reading files into memory")
+        for f in filelist:
+            print(f)
+            self.input_array= ak.concatenate([self.input_array, read_root(f,'ntuples/tree',self.featureBranches+[self.labelBranch])]) #10G virt, 4G real
+
+        self.count = int(ak.num(self.input_array,axis=0))
+        print("done")
+
+    def __len__(self):
+        return int(self.count/self.batchsize)
+
+    def __getitem__(self,idx):
+        import awkward as ak
+        item = self.input_array[idx:idx+self.batchsize]
+        
+        akflat = [ak.flatten(item[branch]).to_numpy() for branch in self.featureBranches]
+        npstack = np.vstack(akflat,dtype=np.float32)
+        X = torch.from_numpy(npstack)
+
+        Y = torch.from_numpy(ak.flatten(item[self.labelBranch]).to_numpy())
+        sizeList = torch.tensor(ak.count(item[self.labelBranch],axis=1)).cumsum(axis=0)[:-1]
+        return X.T,Y,sizeList
+
 
 class Net(nn.Module):
     def __init__(self,d):
@@ -67,74 +120,83 @@ def k_means_mod(X):
     return Xmod
 
 
-
-
 def main():
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
+    
+    featureBranches = ["pixelU","pixelV","pixelEta","pixelPhi","pixelR","pixelZ","pixelCharge","pixelTrackerLayer"]
+    trainDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan26/train/OctopiNtuples_1.root"),featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=50) #batches of 50 jets with ~100 pixels each
+    print("training dataset has {} jets. Running {} batches".format(len(trainDS)*trainDS.batchsize,len(trainDS)))
 
-    directory_path = 'QCDJan26/'
-
-    for filename in os.listdir(directory_path): ##next 3 lines modify for all files in folder PATH
-        if os.path.isfile(os.path.join(directory_path, filename)) and filename.endswith('.root'):
-            with uproot.open(os.path.join(directory_path, filename)) as f:
-            #with uproot.open("GraphCoreNtuples.root") as f:
-
-                tree=f['ntuples/tree']
-                #plot one jet core
-                n=1
-
-                mva = Net(d=6).to(device) ## with xmod set, without should be 6
-                
-                opt = torch.optim.SGD(mva.parameters(),lr=.001,momentum=0.5)
-                opt = torch.optim.Adam(mva.parameters(),lr=.001)
-                lossfunc = losses.ContrastiveLoss()
-                
-                coords = tree.arrays()#,entry_start=n,entry_stop=n+1) 
-
-                mva.train()
-                #train loop
-                #pdb.set_trace()
-                for epoch in range(500):
-                    print("EPOCH {}".format(epoch)) 
-                    for i in range(coords['caloJetPt'].to_numpy().shape[0]):
-                        if i%2==0:
-                            xvals = coords['pixelX'][i].to_numpy()
-                            yvals = coords['pixelY'][i].to_numpy()
-                            zvals = coords['pixelZ'][i].to_numpy()
-                            etavals = coords['pixelEta'][i].to_numpy()
-                            phivals= coords['pixelPhi'][i].to_numpy()
-                            charges = coords['pixelCharge'][i].to_numpy()
-                            simIDs = coords["pixelSimTrackID"][i].to_numpy()
-                                
-                            jetPt = coords['caloJetPt'][i]
-                            jetEta = coords['caloJetEta'][i]
-                            jetPhi = coords['caloJetPhi'][i]
-
-                            uniqueIDs = set(simIDs)
-                            nUniqueIDs = len(uniqueIDs)
-
-                            X = torch.from_numpy(np.vstack([xvals,yvals,zvals,etavals,phivals,charges]).T)
-                            X = X.to(torch.float32).to(device)
-                            Y = torch.from_numpy(simIDs)
-                            Y = Y.to(torch.float32).to(device)
-
-                            #try shifting each point given tracker layer in tree
+    valDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan26/train/OctopiNtuples_11.root"),featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=50)
 
 
-                        opt.zero_grad()
-                        pred = mva(X) #Xmod
-                        loss = lossfunc(pred,Y)
-                        if i%100==0:
-                            print("epoch {} loss: {:.5f}".format(epoch,loss))
-                        loss.backward()
-                        opt.step()
+    mva = Net(d=len(featureBranches)).to(device) ## with xmod set, without should be 6
+    opt = torch.optim.Adam(mva.parameters(),lr=.001)
+    lossfunc = losses.ContrastiveLoss()#TODO try different loss function implementation, like exatrxk's?
 
+    lossVals = []
+    valLossVals = []
+    for epoch in range(10):
+        mva.train()
+        print("EPOCH {}".format(epoch)) 
+        
+        epochStart = time.time()
+        
+        for i,(X,Y,sizeList) in enumerate(trainDS):
+            if 5*i>len(trainDS):
+                i=0
+                break
+
+            X=X.to(device)
+            Y=Y.to(device)
+            opt.zero_grad()
+
+            pred = mva(X) #Xmod
+
+            predsplit = torch.tensor_split(pred,tuple(sizeList),dim=0)
+            ysplit = torch.tensor_split(Y,tuple(sizeList),dim=0)
+            totLoss = torch.zeros(1,device=device)
+            for (jetPred,jetY) in zip(predsplit,ysplit): #vectorize this somehow?
+                totLoss+=lossfunc(jetPred,jetY)
+            
+            if i%50==epoch:
+                print("mini {} loss: {:.5f}".format(i,float(totLoss)))
+                lossVals.append(float(totLoss))
+            totLoss.backward()
+            opt.step()
+        
+        print("Epoch time: {:.2f}".format(time.time()-epochStart))
+        
+        mva.eval()
+        valLoss = torch.zeros(1,device=device)
+        for i,(X,Y,sizeList) in enumerate(valDS):
+            if 5*i>len(valDS):
+                i=0
+                break
+
+            X=X.to(device)
+            Y=Y.to(device)
+            opt.zero_grad()
+
+            pred = mva(X) 
+
+            predsplit = torch.tensor_split(pred,tuple(sizeList),dim=0)
+            ysplit = torch.tensor_split(Y,tuple(sizeList),dim=0)
+            for (jetPred,jetY) in zip(predsplit,ysplit): 
+                valLoss+=lossfunc(jetPred,jetY)
+        valLossVals.append(float(valLoss))
+
+
+    plt.plot(lossVals)
+    plt.savefig("loss.png")
+    plt.clf()
+    plt.plot(valLossVals)
+    plt.savefig("valloss.png")
 
     #save model for later use
     torch.save(mva, 'models/trained_mlp.pth')
-
 
 
 if __name__ == "__main__":

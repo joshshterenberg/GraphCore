@@ -197,7 +197,7 @@ DeepCoreNtuplizer::DeepCoreNtuplizer(const edm::ParameterSet& iConfig) :
 
     //pixel variables
 
-    DeepCoreNtuplizerTree->Branch("pixelR",&pixelYvec);
+    DeepCoreNtuplizerTree->Branch("pixelR",&pixelRvec);
     DeepCoreNtuplizerTree->Branch("pixelPhi",&pixelPhivec);
     DeepCoreNtuplizerTree->Branch("pixelZ",&pixelZvec);
     

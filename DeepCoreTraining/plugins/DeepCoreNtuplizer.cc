@@ -348,7 +348,7 @@ void DeepCoreNtuplizer::produce(edm::Event& iEvent, const edm::EventSetup& iSetu
             }
             //std::cout << "tot pixels: " << nPixels << std::endl; //50-300 pixels within deltaR=0.1. Too many?
             
-            if(nPixels>0) DeepCoreNtuplizerTree->Fill();
+            if(nPixels>1) DeepCoreNtuplizerTree->Fill(); //a single pixel breaks contrastive loss function
             pixelXvec.clear();
             pixelYvec.clear();
             pixelZvec.clear();

@@ -65,6 +65,13 @@ class OctopiDataset(Dataset):
         sizeList = torch.tensor(ak.count(item[self.labelBranch],axis=1)).cumsum(axis=0)[:-1]
         return X.T,Y,sizeList
 
+@torch.jit.script
+def PairwiseHingeLoss(pred,y):
+    dists = torch.pdist(pred).flatten()
+    ys = torch.pdist(y.to(torch.float).unsqueeze(0).T,0.0).flatten() #0-norm: 0 if same, 1 if different
+    ys = 2*ys-1 #map 0,1 to -1,1
+    return  torch.nn.functional.hinge_embedding_loss(dists,ys,margin=1.0)
+
 
 class Net(nn.Module):
     def __init__(self,d):
@@ -126,15 +133,14 @@ def main():
     print(f"Using device: {device}")
     
     featureBranches = ["pixelU","pixelV","pixelEta","pixelPhi","pixelR","pixelZ","pixelCharge","pixelTrackerLayer"]
-    trainDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan26/train/OctopiNtuples_1.root"),featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=50) #batches of 50 jets with ~100 pixels each
+    trainDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan26/train/OctopiNtuples_1.root"),featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=20) #batches of 50 jets with ~100 pixels each
     print("training dataset has {} jets. Running {} batches".format(len(trainDS)*trainDS.batchsize,len(trainDS)))
 
-    valDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan26/train/OctopiNtuples_11.root"),featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=50)
+    valDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan26/train/OctopiNtuples_11.root"),featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=500) #GPU can handle it (5GB VRAM usage), so seems fine for validation
 
 
     mva = Net(d=len(featureBranches)).to(device) ## with xmod set, without should be 6
     opt = torch.optim.Adam(mva.parameters(),lr=.001)
-    lossfunc = losses.ContrastiveLoss()#TODO try different loss function implementation, like exatrxk's?
 
     lossVals = []
     valLossVals = []
@@ -145,21 +151,22 @@ def main():
         epochStart = time.time()
         
         for i,(X,Y,sizeList) in enumerate(trainDS):
-            if 5*i>len(trainDS):
+            if i>len(trainDS):
                 i=0
                 break
-
+            
             X=X.to(device)
             Y=Y.to(device)
             opt.zero_grad()
 
             pred = mva(X) #Xmod
-
             predsplit = torch.tensor_split(pred,tuple(sizeList),dim=0)
             ysplit = torch.tensor_split(Y,tuple(sizeList),dim=0)
             totLoss = torch.zeros(1,device=device)
-            for (jetPred,jetY) in zip(predsplit,ysplit): #vectorize this somehow?
-                totLoss+=lossfunc(jetPred,jetY)
+            for j,(jetPred,jetY) in enumerate(zip(predsplit,ysplit)): #vectorize this somehow?
+                if jetY.shape[0]==1: #needed for jan26 ntuples but not later
+                    continue
+                totLoss+=PairwiseHingeLoss(jetPred,jetY)
             
             if i%50==epoch:
                 print("mini {} loss: {:.5f}".format(i,float(totLoss)))
@@ -172,7 +179,7 @@ def main():
         mva.eval()
         valLoss = torch.zeros(1,device=device)
         for i,(X,Y,sizeList) in enumerate(valDS):
-            if 5*i>len(valDS):
+            if i>len(valDS):
                 i=0
                 break
 
@@ -185,7 +192,9 @@ def main():
             predsplit = torch.tensor_split(pred,tuple(sizeList),dim=0)
             ysplit = torch.tensor_split(Y,tuple(sizeList),dim=0)
             for (jetPred,jetY) in zip(predsplit,ysplit): 
-                valLoss+=lossfunc(jetPred,jetY)
+                if jetY.shape[0]==1: #needed for jan26 ntuples but not later
+                    continue
+                valLoss+=PairwiseHingeLoss(jetPred,jetY)
         valLossVals.append(float(valLoss))
 
 

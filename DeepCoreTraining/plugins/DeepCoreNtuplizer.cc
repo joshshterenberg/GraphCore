@@ -116,7 +116,7 @@ class DeepCoreNtuplizer : public edm::stream::EDProducer<> {
         int eventID;
         
         float caloJetP,caloJetPt,caloJetEta,caloJetPhi;
-        std::vector<float> pixelXvec,pixelYvec,pixelZvec,pixelUvec,pixelVvec,pixelEtavec,pixelPhivec,pixelChargevec, pixelSimTrackPtvec, pixelSimTrackEtavec, pixelSimTrackPhivec;
+        std::vector<float> pixelXvec,pixelYvec,pixelRvec,pixelZvec,pixelUvec,pixelVvec,pixelEtavec,pixelPhivec,pixelChargevec, pixelSimTrackPtvec, pixelSimTrackEtavec, pixelSimTrackPhivec;
         std::vector<int> pixelTrackerLayervec,pixelSimTrackIDvec, pixelSimTrackPdgvec;
 
 
@@ -206,8 +206,8 @@ DeepCoreNtuplizer::DeepCoreNtuplizer(const edm::ParameterSet& iConfig) :
     //DeepCoreNtuplizerTree->Branch("pixelX",&pixelXvec);
     //DeepCoreNtuplizerTree->Branch("pixelY",&pixelYvec);
     //Conformal coordinates instead of x,y
-    DeepCoreNtuplizerTree->Branch("pixelU",&pixelXvec);
-    DeepCoreNtuplizerTree->Branch("pixelV",&pixelYvec);
+    DeepCoreNtuplizerTree->Branch("pixelU",&pixelUvec);
+    DeepCoreNtuplizerTree->Branch("pixelV",&pixelVvec);
 
     DeepCoreNtuplizerTree->Branch("pixelCharge",&pixelChargevec);
     DeepCoreNtuplizerTree->Branch("pixelTrackerLayer",&pixelTrackerLayervec);
@@ -283,7 +283,7 @@ void DeepCoreNtuplizer::produce(edm::Event& iEvent, const edm::EventSetup& iSetu
 
     for (unsigned int jetIdx = 0; jetIdx < cores->size(); jetIdx++) { //loop jet
         const reco::Candidate& jet = (*cores)[jetIdx];
-        if ((jet.pt() > ptMin_ && std::abs(jet.eta())< etaWhereBarrelEnds_) || (jet.p()>pMin_ && std::abs(jet.eta())>etaWhereBarrelEnds_)) { 
+        if ((jet.pt() > ptMin_ && std::abs(jet.eta())< etaWhereBarrelEnds_) || (jet.p()>pMin_ && std::abs(jet.eta())>etaWhereBarrelEnds_ && std::abs(jet.eta())<2.5 )) { 
             caloJetP = jet.p();
             caloJetPt = jet.pt();
             caloJetEta = jet.eta();
@@ -328,6 +328,7 @@ void DeepCoreNtuplizer::produce(edm::Event& iEvent, const edm::EventSetup& iSetu
                             //FILL
                             pixelXvec.push_back(pixelX);
                             pixelYvec.push_back(pixelY);
+                            pixelRvec.push_back(sqrt(pixelX*pixelX+pixelY*pixelY));
                             pixelZvec.push_back(pixelGlobalPoint.z());
                             pixelEtavec.push_back(pixelGlobalPoint.eta());
                             pixelPhivec.push_back(pixelGlobalPoint.phi());
@@ -356,6 +357,7 @@ void DeepCoreNtuplizer::produce(edm::Event& iEvent, const edm::EventSetup& iSetu
             pixelPhivec.clear();
             pixelTrackerLayervec.clear();
             pixelChargevec.clear();
+            pixelRvec.clear();
             pixelUvec.clear();
             pixelVvec.clear();
             

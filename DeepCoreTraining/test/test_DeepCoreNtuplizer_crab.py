@@ -1,7 +1,7 @@
 from CRABClient.UserUtilities import config,getUsernameFromCRIC
 config = config()
 
-config.General.requestName = 'OctopiNtuplesQCDJan26'
+config.General.requestName = 'OctopiNtuplesQCDJan31'
 config.General.workArea = 'crab_projects'
 config.General.transferOutputs = True
 config.General.transferLogs = True

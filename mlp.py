@@ -16,6 +16,8 @@ from sklearn.cluster import DBSCAN, KMeans, SpectralClustering
 
 from torch.utils.data.dataset import Dataset
 from torch.utils.data import DataLoader
+from torch.cuda.amp import autocast, GradScaler
+from torch.optim.lr_scheduler import StepLR
 
 import time
 import glob
@@ -69,7 +71,7 @@ class OctopiDataset(Dataset):
 def PairwiseHingeLoss(pred,y):
     dists = torch.pdist(pred).flatten()
     ys = torch.pdist(y.to(torch.float).unsqueeze(0).T,0.0).flatten() #0-norm: 0 if same, 1 if different
-    ys = 2*ys-1 #map 0,1 to -1,1
+    ys = -2*ys+1 #map 0,1 to -1,1
     return  torch.nn.functional.hinge_embedding_loss(dists,ys,margin=1.0)
 
 
@@ -142,6 +144,9 @@ def main():
     mva = Net(d=len(featureBranches)).to(device) ## with xmod set, without should be 6
     opt = torch.optim.Adam(mva.parameters(),lr=.001)
 
+    scaler = GradScaler()
+    scheduler = StepLR(opt, step_size=3, gamma=0.5)
+
     lossVals = []
     valLossVals = []
     for epoch in range(10):
@@ -159,21 +164,30 @@ def main():
             Y=Y.to(device)
             opt.zero_grad()
 
-            pred = mva(X) #Xmod
-            predsplit = torch.tensor_split(pred,tuple(sizeList),dim=0)
-            ysplit = torch.tensor_split(Y,tuple(sizeList),dim=0)
-            totLoss = torch.zeros(1,device=device)
-            for j,(jetPred,jetY) in enumerate(zip(predsplit,ysplit)): #vectorize this somehow?
-                if jetY.shape[0]==1: #needed for jan26 ntuples but not later
-                    continue
-                totLoss+=PairwiseHingeLoss(jetPred,jetY)
+            #mixed precision with torch.cuda.amp
+            #added with function, modified backward and step.
+            with autocast():
+
+                pred = mva(X) #Xmod
+                predsplit = torch.tensor_split(pred,tuple(sizeList),dim=0)
+                ysplit = torch.tensor_split(Y,tuple(sizeList),dim=0)
+                totLoss = torch.zeros(1,device=device)
+                for j,(jetPred,jetY) in enumerate(zip(predsplit,ysplit)): #vectorize this somehow?
+                    if jetY.shape[0]==1: #needed for jan26 ntuples but not later
+                        continue
+                    totLoss+=PairwiseHingeLoss(jetPred,jetY)
+                
+                if i%50==epoch:
+                    print("mini {} loss: {:.5f}".format(i,float(totLoss)))
+                    lossVals.append(float(totLoss))
             
-            if i%50==epoch:
-                print("mini {} loss: {:.5f}".format(i,float(totLoss)))
-                lossVals.append(float(totLoss))
-            totLoss.backward()
-            opt.step()
+            #totLoss.backward()
+            #opt.step()
+            scaler.scale(totLoss).backward()
+            scaler.step(opt)
+            scaler.update()
         
+        scheduler.step()
         print("Epoch time: {:.2f}".format(time.time()-epochStart))
         
         mva.eval()

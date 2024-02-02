@@ -69,6 +69,7 @@ class OctopiDataset(Dataset):
 
 @torch.jit.script
 def PairwiseHingeLoss(pred,y):
+    #TODO: split attractive/repulsive losses so we can scale their relative contributions
     dists = torch.pdist(pred).flatten()
     ys = torch.pdist(y.to(torch.float).unsqueeze(0).T,0.0).flatten() #0-norm: 0 if same, 1 if different
     ys = -2*ys+1 #map 0,1 to -1,1
@@ -147,9 +148,12 @@ def main():
     scaler = GradScaler()
     scheduler = StepLR(opt, step_size=3, gamma=0.5)
 
-    lossVals = []
-    valLossVals = []
+    epochLosses = []
+    epochValLosses = []
     for epoch in range(10):
+        epochLoss = torch.zeros(1,device=device).detach()
+        epochValLoss = torch.zeros(1,device=device).detach()
+
         mva.train()
         print("EPOCH {}".format(epoch)) 
         
@@ -171,27 +175,27 @@ def main():
                 pred = mva(X) #Xmod
                 predsplit = torch.tensor_split(pred,tuple(sizeList),dim=0)
                 ysplit = torch.tensor_split(Y,tuple(sizeList),dim=0)
-                totLoss = torch.zeros(1,device=device)
+                batchLoss = torch.zeros(1,device=device)
                 for j,(jetPred,jetY) in enumerate(zip(predsplit,ysplit)): #vectorize this somehow?
                     if jetY.shape[0]==1: #needed for jan26 ntuples but not later
                         continue
-                    totLoss+=PairwiseHingeLoss(jetPred,jetY)
+                    batchLoss+=PairwiseHingeLoss(jetPred,jetY)
                 
                 if i%50==epoch:
-                    print("mini {} loss: {:.5f}".format(i,float(totLoss)))
-                    lossVals.append(float(totLoss))
+                    print("batch {} loss: {:.5f}".format(i,float(batchLoss.detach())))
+                epochLoss+=batchLoss.detach()
+
             
-            #totLoss.backward()
+            #batchLoss.backward()
             #opt.step()
-            scaler.scale(totLoss).backward()
+            scaler.scale(batchLoss).backward()
             scaler.step(opt)
             scaler.update()
         
+        epochLosses.append(float(epochLoss))
         scheduler.step()
-        print("Epoch time: {:.2f}".format(time.time()-epochStart))
         
         mva.eval()
-        valLoss = torch.zeros(1,device=device)
         for i,(X,Y,sizeList) in enumerate(valDS):
             if i>len(valDS):
                 i=0
@@ -199,7 +203,6 @@ def main():
 
             X=X.to(device)
             Y=Y.to(device)
-            opt.zero_grad()
 
             pred = mva(X) 
 
@@ -208,15 +211,16 @@ def main():
             for (jetPred,jetY) in zip(predsplit,ysplit): 
                 if jetY.shape[0]==1: #needed for jan26 ntuples but not later
                     continue
-                valLoss+=PairwiseHingeLoss(jetPred,jetY)
-        valLossVals.append(float(valLoss))
+                epochValLoss+=PairwiseHingeLoss(jetPred,jetY).detach()
+        epochValLosses.append(float(epochValLoss))
+        print("Epoch time: {:.2f} Training Loss: {:.2f} Validation Loss: {:.2f}".format(time.time()-epochStart,epochLosses[-1],epochValLosses[-1]))
 
 
-    plt.plot(lossVals)
+    plt.plot(epochLosses,label='training')
+    plt.plot(epochValLosses,label='validation')
+    plt.ylabel("Loss")
+    plt.xlabel("Epoch")
     plt.savefig("loss.png")
-    plt.clf()
-    plt.plot(valLossVals)
-    plt.savefig("valloss.png")
 
     #save model for later use
     torch.save(mva, 'models/trained_mlp.pth')

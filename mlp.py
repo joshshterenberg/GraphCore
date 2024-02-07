@@ -108,26 +108,6 @@ class Net(nn.Module):
         return x 
 
 
-def k_means_mod(X):
-    kmeans = KMeans(n_clusters=4).fit(X[:,:3])
-    centers = kmeans.cluster_centers_
-    labels = kmeans.labels_
-    u_lables = np.unique(labels)
-    xmod = []
-    ymod = []
-    zmod = []
-    for l in range(len(u_lables)):
-        xmod.append(xvals[labels == l] - centers[l][0])
-        ymod.append(yvals[labels == l] - centers[l][1])
-        zmod.append(zvals[labels == l] - centers[l][2])
-
-    xmod = np.concatenate(xmod)
-    ymod = np.concatenate(ymod)
-    zmod = np.concatenate(zmod)
-
-    Xmod = torch.from_numpy(np.vstack([xmod, ymod, zmod, etavals, phivals, charges]).T)
-    Xmod = Xmod.to(torch.float32)
-    return Xmod
 
 
 def main():

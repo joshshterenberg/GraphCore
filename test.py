@@ -12,14 +12,136 @@ import torch.nn.functional as F
 from pytorch_metric_learning import distances, losses, miners, reducers, testers
 import torch_geometric.nn as geonn
 
-from mlp import Net
+from mlp import Net, OctopiDataset
 from gnn import GCN
+
+import time
+import glob
 
 from collections import Counter
 
 from sklearn.cluster import DBSCAN, KMeans, SpectralClustering
 
 def main():
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
+    
+    featureBranches = ["pixelU","pixelV","pixelEta","pixelPhi","pixelR","pixelZ","pixelCharge","pixelTrackerLayer"]
+
+
+    testDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan26/test/OctopiNtuples_66.root"), featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=20)
+
+    print("test dataset has {} jets. Running {} batches".format(len(testDS)*testDS.batchsize,len(testDS)))
+    #directory_path = 'QCDJan26/'
+
+    #load models
+    mva = torch.load('models/trained_mlp.pth')
+    mva.to(device).eval()
+    #model = torch.load('models/trained_gnn.pth')
+    #model.eval()
+        
+
+    cluster_ratios = []
+    LHC_matches = []
+    perfect_matches = []
+
+    print("\n")
+    print("Metric 0: Trend of number (%) of recognized clusters in sample (saved to cluster_ratios.png).")
+    print("Match efficiency per cluster, ratio of how many are >0.75 in each cluster, % of how many datapoints have a ratio above 0.9.")
+    print("Metric 1: Number (%) of datapoints in sample with ratio of over 90% of match efficiencies greater than 75% (LHC matches).")
+    print("\t get m.e. per cluster, how many m.e.>0.75 is X%, how many clusters with X>0.9 is metric.")
+    print("Metric 2: Same as metric 1, but for match efficiencies exactly 100% (perfect matches).")
+    print("\nCalculating metrics...")
+
+    for i,(X,Y,sizeList) in enumerate(testDS):
+        if i>len(testDS):
+            i=0
+            break
+
+        if i % 10 != 0:
+            break #this is just for computational speed, otherwise it waits forever.
+
+        print(f"Calculating {i} of {len(testDS)}")
+
+        X=X.to(device)
+
+        pred = mva(X) #mlp, not using gnn for now
+    
+        #here must move data to CPU for numpy
+        pred = pred.cpu()
+
+        #clusterize data with DBSCAN (arbitrary hyperparams so far)
+        pred = pred.detach().numpy()
+        clusterizer = DBSCAN(eps=0.01, min_samples=3) # to match knn graph
+        clusterizer.fit(pred)
+
+
+        #get metadata of predicted track and compare
+        u_labels = np.unique(clusterizer.labels_)
+        n_particles = np.unique(Y)
+        cluster_ratios.append(len(u_labels)/len(n_particles))
+        
+        
+        # metric definitions:
+        LHC_match_efficiencies = []
+        perfect_match_efficiencies = []
+        for l in u_labels:
+            if l==-1: continue
+        
+            extraneous_i = 0
+            total_sims = []
+            for i in range(len(pred)):
+                if clusterizer.labels_[i] == l:
+                    total_sims.append(Y[i])
+            #print(f"Cluster {l}:", end=" ")
+            all = len(total_sims)
+            counts = Counter(total_sims)
+            mce = counts.most_common(1)[0][0]
+            total_sims = [item for item in total_sims if item != mce]
+            extraneous_i = len(total_sims)
+            match_eff = 1 - (extraneous_i/all)
+            #print(f"Ratio: {extraneous_i}/{all}. Match efficiency: {match_eff}.", end=" ")
+            #if match_eff > 0.75: print("(LHC Match)")
+            #if match_eff == 1: print("(Perfect Match)")
+            #print()
+            if match_eff == 1: perfect_match_efficiencies.append(match_eff)
+            if match_eff >= 0.75: LHC_match_efficiencies.append(match_eff)
+        LHC_percent = len(LHC_match_efficiencies)/len(u_labels)
+        perfect_percent = len(perfect_match_efficiencies)/len(u_labels)
+    
+        if LHC_percent >= 0.9: LHC_matches.append(1)
+        else: LHC_matches.append(0)
+        if perfect_percent >= 0.9: perfect_matches.append(1)
+        else: perfect_matches.append(0)
+
+
+    print("\nDone")
+    print(f"Metric 1: {np.sum(LHC_matches == 1) / len(LHC_matches) * 100}%")
+    print(f"Metric 2: {np.sum(perfect_matches == 1) / len(perfect_matches) * 100}%")
+        
+        
+    plt.plot(range(len(cluster_ratios)), cluster_ratios)
+    plt.ylabel('ratio (%)')
+    plt.title('Cluster Ratios')
+    plt.savefig('cluster_ratios.png')
+        
+        
+
+        
+
+
+
+
+
+
+
+
+
+
+
+
+    '''
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
@@ -127,7 +249,8 @@ def main():
                 if match_eff == 1: print("(Perfect Match)")
                 print()
         
-        
+    '''
+
 if __name__=="__main__":
     main()
         

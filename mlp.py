@@ -68,12 +68,13 @@ class OctopiDataset(Dataset):
         return X.T,Y,sizeList
 
 @torch.jit.script
-def PairwiseHingeLoss(pred,y):
+def PairwiseHingeLoss(pred,y,a = torch.tensor(1.0)):
     #TODO: split attractive/repulsive losses so we can scale their relative contributions
     dists = torch.pdist(pred).flatten()
     ys = torch.pdist(y.to(torch.float).unsqueeze(0).T,0.0).flatten() #0-norm: 0 if same, 1 if different
-    ys = -2*ys+1 #map 0,1 to -1,1
-    return  torch.nn.functional.hinge_embedding_loss(dists,ys,margin=1.0)
+    #ys = -2*ys+1 #map 0,1 to -1,1
+    return torch.mean(torch.where(ys==0.0, dists, torch.max(torch.tensor(0),a*(1 - dists))))
+    #return torch.nn.functional.hinge_embedding_loss(dists,ys,margin=1.0)
 
 
 class Net(nn.Module):
@@ -159,8 +160,8 @@ def main():
                 for j,(jetPred,jetY) in enumerate(zip(predsplit,ysplit)): #vectorize this somehow?
                     if jetY.shape[0]==1: #needed for jan26 ntuples but not later
                         continue
-                    batchLoss+=PairwiseHingeLoss(jetPred,jetY)
-                
+                    batchLoss+=PairwiseHingeLoss(jetPred,jetY, torch.tensor(0.5)) #a=weight of hinge over MSE
+            
                 if i%50==epoch:
                     print("batch {} loss: {:.5f}".format(i,float(batchLoss.detach())))
                 epochLoss+=batchLoss.detach()
@@ -191,7 +192,7 @@ def main():
             for (jetPred,jetY) in zip(predsplit,ysplit): 
                 if jetY.shape[0]==1: #needed for jan26 ntuples but not later
                     continue
-                epochValLoss+=PairwiseHingeLoss(jetPred,jetY).detach()
+                epochValLoss+=PairwiseHingeLoss(jetPred,jetY, torch.tensor(0.5)).detach()
         epochValLosses.append(float(epochValLoss))
         print("Epoch time: {:.2f} Training Loss: {:.2f} Validation Loss: {:.2f}".format(time.time()-epochStart,epochLosses[-1],epochValLosses[-1]))
 

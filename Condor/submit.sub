@@ -7,7 +7,8 @@ should_transfer_files   = YES
 when_to_transfer_output = ON_EXIT
 request_GPUs = 1
 request_CPUs = 1
-request_memory = 24000
-+MaxRuntime = 8*60
+request_memory = 45000
+request_disk = 100000
++MaxRuntime = 24*60*60
 
 queue

@@ -30,7 +30,7 @@ def main():
     featureBranches = ["pixelU","pixelV","pixelEta","pixelPhi","pixelR","pixelZ","pixelCharge","pixelTrackerLayer"]
 
 
-    testDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan26/test/OctopiNtuples_66.root"), featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=20)
+    testDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan31/test/*"), featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=20)
 
     print("test dataset has {} jets. Running {} batches".format(len(testDS)*testDS.batchsize,len(testDS)))
     #directory_path = 'QCDJan26/'
@@ -41,16 +41,18 @@ def main():
     #model = torch.load('models/trained_gnn.pth')
     #model.eval()
         
-
+    #define vars for metric calc
+    EPS = 0.01
     cluster_ratios = []
-    LHC_matches = []
-    perfect_matches = []
+    #LHC_matches = []
+    #perfect_matches = []
+    LHC_percents = []
+    perfect_percents = []
 
     print("\n")
     print("Metric 0: Trend of number (%) of recognized clusters in sample (saved to cluster_ratios.png).")
-    print("Match efficiency per cluster, ratio of how many are >0.75 in each cluster, % of how many datapoints have a ratio above 0.9.")
-    print("Metric 1: Number (%) of datapoints in sample with ratio of over 90% of match efficiencies greater than 75% (LHC matches).")
-    print("\t get m.e. per cluster, how many m.e.>0.75 is X%, how many clusters with X>0.9 is metric.")
+    print("Metric 1: Total average of match efficiencies greater than 75% (LHC matches).")
+    print("\t get m.e. per cluster, how many m.e.>0.75 is X%, average.")
     print("Metric 2: Same as metric 1, but for match efficiencies exactly 100% (perfect matches).")
     print("\nCalculating metrics...")
 
@@ -73,7 +75,7 @@ def main():
 
         #clusterize data with DBSCAN (arbitrary hyperparams so far)
         pred = pred.detach().numpy()
-        clusterizer = DBSCAN(eps=0.01, min_samples=3) # to match knn graph
+        clusterizer = DBSCAN(eps=EPS, min_samples=3) # to match knn graph
         clusterizer.fit(pred)
 
 
@@ -110,15 +112,20 @@ def main():
         LHC_percent = len(LHC_match_efficiencies)/len(u_labels)
         perfect_percent = len(perfect_match_efficiencies)/len(u_labels)
     
-        if LHC_percent >= 0.9: LHC_matches.append(1)
-        else: LHC_matches.append(0)
-        if perfect_percent >= 0.9: perfect_matches.append(1)
-        else: perfect_matches.append(0)
+        LHC_percents.append(LHC_percent)
+        perfect_percents.append(perfect_percent)
+        #if LHC_percent >= 0.9: LHC_matches.append(1)
+        #else: LHC_matches.append(0)
+        #if perfect_percent >= 0.9: perfect_matches.append(1)
+        #else: perfect_matches.append(0)
+
+
 
 
     print("\nDone")
-    print(f"Metric 1: {np.sum(LHC_matches == 1) / len(LHC_matches) * 100}%")
-    print(f"Metric 2: {np.sum(perfect_matches == 1) / len(perfect_matches) * 100}%")
+    print(f"For a DBSCAN eps of {EPS}:")
+    print(f"Metric 1: {np.avg(LHC_percents) * 100}%")
+    print(f"Metric 2: {np.avg(perfect_percents) * 100}%")
         
         
     plt.plot(range(len(cluster_ratios)), cluster_ratios)

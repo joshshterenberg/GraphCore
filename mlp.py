@@ -117,10 +117,10 @@ def main():
     print(f"Using device: {device}")
     
     featureBranches = ["pixelU","pixelV","pixelEta","pixelPhi","pixelR","pixelZ","pixelCharge","pixelTrackerLayer"]
-    trainDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan26/train/OctopiNtuples_1.root"),featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=20) #batches of 50 jets with ~100 pixels each
+    trainDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan31/train/*.root"),featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=20) #batches of 50 jets with ~100 pixels each
     print("training dataset has {} jets. Running {} batches".format(len(trainDS)*trainDS.batchsize,len(trainDS)))
 
-    valDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan26/train/OctopiNtuples_11.root"),featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=500) #GPU can handle it (5GB VRAM usage), so seems fine for validation
+    valDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan31/val/*"),featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=500)
 
 
     mva = Net(d=len(featureBranches)).to(device) ## with xmod set, without should be 6
@@ -203,8 +203,12 @@ def main():
     plt.xlabel("Epoch")
     plt.savefig("loss.png")
 
+    print("Saved loss.png")
+
     #save model for later use
     torch.save(mva, 'models/trained_mlp.pth')
+
+    print("Saved model successfully")
 
 
 if __name__ == "__main__":

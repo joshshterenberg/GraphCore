@@ -24,15 +24,15 @@ import glob
 
 
 
-def read_root(filename,treename,branches):
-    #read single root file to memory
-    with uproot.open(filename) as f:
-        tree = f[treename]
-        output = tree.arrays(branches)
-        return output
-
-
 class OctopiDataset(Dataset):
+
+    def read_root(self, filename,treename,branches):
+        #read single root file to memory
+        with uproot.open(filename) as f:
+            tree = f[treename]
+            output = tree.arrays(branches)
+            return output
+
     def __init__(self,filelist,featureBranches,labelBranch,batchsize):
         import awkward as ak
         self.filelist = filelist
@@ -47,7 +47,7 @@ class OctopiDataset(Dataset):
         print("reading files into memory")
         for f in filelist:
             print(f)
-            self.input_array= ak.concatenate([self.input_array, read_root(f,'ntuples/tree',self.featureBranches+[self.labelBranch])]) #10G virt, 4G real
+            self.input_array= ak.concatenate([self.input_array, self.read_root(f,'ntuples/tree',self.featureBranches+[self.labelBranch])]) #10G virt, 4G real
 
         self.count = int(ak.num(self.input_array,axis=0))
         print("done")
@@ -67,14 +67,14 @@ class OctopiDataset(Dataset):
         sizeList = torch.tensor(ak.count(item[self.labelBranch],axis=1)).cumsum(axis=0)[:-1]
         return X.T,Y,sizeList
 
+
+
 @torch.jit.script
 def PairwiseHingeLoss(pred,y,a = torch.tensor(1.0)):
-    #TODO: split attractive/repulsive losses so we can scale their relative contributions
     dists = torch.pdist(pred).flatten()
     ys = torch.pdist(y.to(torch.float).unsqueeze(0).T,0.0).flatten() #0-norm: 0 if same, 1 if different
-    #ys = -2*ys+1 #map 0,1 to -1,1
-    return torch.mean(torch.where(ys==0.0, dists, torch.max(torch.tensor(0),a*(1 - dists))))
-    #return torch.nn.functional.hinge_embedding_loss(dists,ys,margin=1.0)
+    hinge_part = torch.max(torch.tensor(0),a*(1 - dists)) 
+    return torch.mean(torch.where(ys==0.0, dists, hinge_part)) / len(y) # normalized
 
 
 class Net(nn.Module):
@@ -91,8 +91,7 @@ class Net(nn.Module):
         self.ac4 = nn.LeakyReLU()
         self.fc5 = nn.Linear(25,25)
         self.ac5 = nn.LeakyReLU()
-        self.fcLast = nn.Linear(25,3) #2nd dim must match gnn
-        #self.double()
+        self.fcLast = nn.Linear(25,4) #2nd dim must match gnn. attempting cast to 4d
     
     def forward(self,x):
         x = self.fc1(x)
@@ -160,7 +159,7 @@ def main():
                 for j,(jetPred,jetY) in enumerate(zip(predsplit,ysplit)): #vectorize this somehow?
                     if jetY.shape[0]==1: #needed for jan26 ntuples but not later
                         continue
-                    batchLoss+=PairwiseHingeLoss(jetPred,jetY, torch.tensor(0.5)) #a=weight of hinge over MSE
+                    batchLoss+=PairwiseHingeLoss(jetPred,jetY, torch.tensor(10)) #a=weight of hinge over MSE, trying 10X loss for hinge.
             
                 if i%50==epoch:
                     print("batch {} loss: {:.5f}".format(i,float(batchLoss.detach())))
@@ -192,13 +191,14 @@ def main():
             for (jetPred,jetY) in zip(predsplit,ysplit): 
                 if jetY.shape[0]==1: #needed for jan26 ntuples but not later
                     continue
-                epochValLoss+=PairwiseHingeLoss(jetPred,jetY, torch.tensor(0.5)).detach()
+                epochValLoss+=PairwiseHingeLoss(jetPred,jetY, torch.tensor(10)).detach()
         epochValLosses.append(float(epochValLoss))
         print("Epoch time: {:.2f} Training Loss: {:.2f} Validation Loss: {:.2f}".format(time.time()-epochStart,epochLosses[-1],epochValLosses[-1]))
 
 
     plt.plot(epochLosses,label='training')
     plt.plot(epochValLosses,label='validation')
+    plt.legend()
     plt.ylabel("Loss")
     plt.xlabel("Epoch")
     plt.savefig("loss.png")

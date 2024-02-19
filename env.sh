@@ -13,3 +13,6 @@ python3 -m pip install uproot
 python3 -m pip install matplotlib
 python3 -m pip install numpy
 python3 -m pip install scipy
+#python3 -m pip install cuml
+#python3 -m pip install collections #part of python3 by default
+#python3 -m pip install multiprocessing #part of python3 by default

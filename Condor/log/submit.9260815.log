@@ -1,0 +1,49 @@
+000 (9260815.000.000) 02/28 18:16:28 Job submitted from host: <188.184.90.62:9618?addrs=188.184.90.62-9618+[2001-1458-201-e4--100-238]-9618&alias=bigbird16.cern.ch&noUDP&sock=schedd_4073970_23e3>
+...
+040 (9260815.000.000) 02/28 18:20:12 Started transferring input files
+	Transferring to host: <188.184.195.218:9618?addrs=188.184.195.218-9618+[2001-1458-301-72--100-f5]-9618&alias=b9g47n4435.cern.ch&noUDP&sock=slot1_1_1803470_83b3_19152>
+...
+040 (9260815.000.000) 02/28 18:20:12 Finished transferring input files
+...
+001 (9260815.000.000) 02/28 18:20:13 Job executing on host: <188.184.195.218:9618?addrs=188.184.195.218-9618+[2001-1458-301-72--100-f5]-9618&alias=b9g47n4435.cern.ch&noUDP&sock=startd_7423_2399>
+...
+006 (9260815.000.000) 02/28 18:20:22 Image size of job updated: 18300
+	18  -  MemoryUsage of job (MB)
+	18300  -  ResidentSetSize of job (KB)
+...
+006 (9260815.000.000) 02/28 18:25:23 Image size of job updated: 418316
+	408  -  MemoryUsage of job (MB)
+	417132  -  ResidentSetSize of job (KB)
+...
+006 (9260815.000.000) 02/28 18:30:23 Image size of job updated: 30631000
+	19257  -  MemoryUsage of job (MB)
+	19718428  -  ResidentSetSize of job (KB)
+...
+006 (9260815.000.000) 02/28 18:35:23 Image size of job updated: 44046328
+	41600  -  MemoryUsage of job (MB)
+	42597992  -  ResidentSetSize of job (KB)
+...
+006 (9260815.000.000) 02/28 18:40:24 Image size of job updated: 44892428
+	41600  -  MemoryUsage of job (MB)
+	42597992  -  ResidentSetSize of job (KB)
+...
+040 (9260815.000.000) 02/28 18:53:16 Started transferring output files
+...
+040 (9260815.000.000) 02/28 18:53:16 Finished transferring output files
+...
+004 (9260815.000.000) 02/28 18:53:16 Job was evicted.
+	(0) CPU times
+		Usr 0 03:53:52, Sys 0 00:09:50  -  Run Remote Usage
+		Usr 0 00:00:00, Sys 0 00:00:00  -  Run Local Usage
+	33666  -  Run Bytes Sent By Job
+	935  -  Run Bytes Received By Job
+	Partitionable Resources :    Usage  Request Allocated Assigned
+	   Cpus                 :    14.31       22        22 
+	   Disk (KB)            :    70       10000   1060844 
+	   Gpus (Average)       :     0           1         1 "GPU-549d2b18"
+	   GpusMemory (MB)      :   435                       
+	   Memory (MB)          : 41600       44000     44000 
+...
+009 (9260815.000.000) 02/28 18:53:16 Job was aborted.
+	via condor_rm (by user jshteren)
+...

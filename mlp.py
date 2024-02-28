@@ -73,8 +73,8 @@ class OctopiDataset(Dataset):
 def PairwiseHingeLoss(pred,y,a = torch.tensor(1.0)):
     dists = torch.pdist(pred).flatten()
     ys = torch.pdist(y.to(torch.float).unsqueeze(0).T,0.0).flatten() #0-norm: 0 if same, 1 if different
-    hinge_part = torch.max(torch.tensor(0),a*(1 - dists)) 
-    return torch.mean(torch.where(ys==0.0, dists, hinge_part)) / len(y) # normalized
+    hinge_part = torch.max(torch.tensor(0),a*(1 - dists)) #TODO: margin ('1'-x) is arbitrary and dependent on scale factor of patent space. Needs optimization.
+    return torch.mean(torch.where(ys==0.0, dists, hinge_part)) / len(ys) # normalized?
 
 
 class Net(nn.Module):
@@ -91,7 +91,7 @@ class Net(nn.Module):
         self.ac4 = nn.LeakyReLU()
         self.fc5 = nn.Linear(25,25)
         self.ac5 = nn.LeakyReLU()
-        self.fcLast = nn.Linear(25,4) #2nd dim must match gnn. attempting cast to 4d
+        self.fcLast = nn.Linear(25,4) #2nd dim must match gnn. attempting cast to 4d for no reason
     
     def forward(self,x):
         x = self.fc1(x)
@@ -114,9 +114,11 @@ def main():
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
+    if (device == 'cpu'): 
+        quit() #needs to run on gpu
     
     featureBranches = ["pixelU","pixelV","pixelEta","pixelPhi","pixelR","pixelZ","pixelCharge","pixelTrackerLayer"]
-    trainDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan31/train/*.root"),featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=20) #batches of 50 jets with ~100 pixels each
+    trainDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan31/train/*"),featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=20) #batches of 50 jets with ~100 pixels each
     print("training dataset has {} jets. Running {} batches".format(len(trainDS)*trainDS.batchsize,len(trainDS)))
 
     valDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan31/val/*"),featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=500)
@@ -159,7 +161,7 @@ def main():
                 for j,(jetPred,jetY) in enumerate(zip(predsplit,ysplit)): #vectorize this somehow?
                     if jetY.shape[0]==1: #needed for jan26 ntuples but not later
                         continue
-                    batchLoss+=PairwiseHingeLoss(jetPred,jetY, torch.tensor(10)) #a=weight of hinge over MSE, trying 10X loss for hinge.
+                    batchLoss+=PairwiseHingeLoss(jetPred,jetY, torch.tensor(5)) #a=weight of hinge over MSE, trying 5X loss for hinge.
             
                 if i%50==epoch:
                     print("batch {} loss: {:.5f}".format(i,float(batchLoss.detach())))

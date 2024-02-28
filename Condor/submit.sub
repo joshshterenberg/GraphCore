@@ -8,7 +8,7 @@ when_to_transfer_output = ON_EXIT
 request_GPUs = 1
 request_CPUs = 1
 request_memory = 45000
-request_disk = 100000
+request_disk = 10000
 +MaxRuntime = 24*60*60
 
 queue

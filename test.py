@@ -37,62 +37,17 @@ testDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan31/te
 
 print("test dataset has {} jets. Running {} batches".format(len(testDS)*testDS.batchsize,len(testDS)))
 
-def work_fn(i, X, Y):
-    if i > len(testDS):
-        return
-        
-
-    X=X.to(device)
-
-    pred = mva(X)
-    pred = pred.cpu()
-
-    pred = pred.detach().numpy()
-    clusterizer = DBSCAN(eps=EPS, min_samples=3)
-    clusterizer.fit(pred)
-    
-    u_labels = np.unique(clusterizer.labels_)
-    n_particles = np.unique(Y)
-    cluster_ratios.append(len(u_labels)/len(n_particles))
-    
-    LHC_match_efficiencies = []
-    perfect_match_efficiencies = []
-    for l in u_labels:
-        if l==-1: continue
-    
-        extraneous_i = 0
-        total_sims = []
-        for i in range(len(pred)):
-            if clusterizer.labels_[i] == l:
-                total_sims.append(Y[i])
-        all_sims = len(total_sims)
-        counts = Counter(total_sims)
-        mce = counts.most_common(1)[0][0]
-        total_sims = [item for item in total_sims if item != mce]
-        extraneous_i = len(total_sims)
-        match_eff = 1 - (extraneous_i/all_sims)
-        if match_eff == 1: perfect_match_efficiencies.append(match_eff)
-        if match_eff >= 0.75: LHC_match_efficiencies.append(match_eff)
-
-    LHC_percent = len(LHC_match_efficiencies)/len(u_labels)
-    perfect_percent = len(perfect_match_efficiencies)/len(u_labels)
-    
-    #LHC_percents.append(LHC_percent)
-    #perfect_percents.append(perfect_percent)
-    return [LHC_percent, perfect_percent]
-    ###need to map to 2-array for multiprocessing
-
 def main():
 
-    #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    #print(f"Using device: {device}")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
     
-    #featureBranches = ["pixelU","pixelV","pixelEta","pixelPhi","pixelR","pixelZ","pixelCharge","pixelTrackerLayer"]
+    featureBranches = ["pixelU","pixelV","pixelEta","pixelPhi","pixelR","pixelZ","pixelCharge","pixelTrackerLayer"]
 
     
-    #testDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan31/test/*"), featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=20)
+    testDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan31/test/*"), featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=20)
 
-    #print("test dataset has {} jets. Running {} batches".format(len(testDS)*testDS.batchsize,len(testDS)))
+    print("test dataset has {} jets. Running {} batches".format(len(testDS)*testDS.batchsize,len(testDS)))
     #directory_path = 'QCDJan26/'
 
     #load models
@@ -123,18 +78,10 @@ def main():
         #print("\nCalculating metrics...")
 
         
-        ###MULTIPROCESSING STUFF
-        pool_obj = multiprocessing.Pool()
-        #percents = pool_obj.map(work_fn, [i, X, Y for i,(X,Y,sizeList) in enumerate(testDS)])
-        percents = pool_obj.map(lambda args: work_fn(*args), [(i, X, Y) for i, (X, Y, sizeList) in enumerate(testDS)])
-
-        pool_obj.close()
-        ###
-
         LHC_arr.append(np.mean(percents[:,0])) # LHC percents
         perfect_arr.append(np.mean(percents[:,1])) # perfect percents
 
-        '''
+        
         for i,(X,Y,sizeList) in enumerate(testDS):
             if i>len(testDS):
                 i=0
@@ -198,7 +145,7 @@ def main():
 
         LHC_arr.append(np.mean(LHC_percents))
         perfect_arr.append(np.mean(perfect_percents))
-        '''
+        
         
 
     print("Done, generating plots")

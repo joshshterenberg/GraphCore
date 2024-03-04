@@ -91,7 +91,7 @@ class Net(nn.Module):
         self.ac4 = nn.LeakyReLU()
         self.fc5 = nn.Linear(25,25)
         self.ac5 = nn.LeakyReLU()
-        self.fcLast = nn.Linear(25,4) #2nd dim must match gnn. attempting cast to 4d for no reason
+        self.fcLast = nn.Linear(25,8) #2nd dim must match gnn. attempting cast to 8d for no reason
     
     def forward(self,x):
         x = self.fc1(x)
@@ -125,7 +125,7 @@ def main():
 
 
     mva = Net(d=len(featureBranches)).to(device) ## with xmod set, without should be 6
-    opt = torch.optim.Adam(mva.parameters(),lr=.001)
+    opt = torch.optim.Adam(mva.parameters(),lr=.000) # was 0.001, testing
 
     scaler = GradScaler()
     scheduler = StepLR(opt, step_size=3, gamma=0.5)
@@ -161,7 +161,7 @@ def main():
                 for j,(jetPred,jetY) in enumerate(zip(predsplit,ysplit)): #vectorize this somehow?
                     if jetY.shape[0]==1: #needed for jan26 ntuples but not later
                         continue
-                    batchLoss+=PairwiseHingeLoss(jetPred,jetY, torch.tensor(5)) #a=weight of hinge over MSE, trying 5X loss for hinge.
+                    batchLoss+=PairwiseHingeLoss(jetPred,jetY, torch.tensor(10)) #a=weight of hinge over MSE, trying 10X loss for hinge.
             
                 if i%50==epoch:
                     print("batch {} loss: {:.5f}".format(i,float(batchLoss.detach())))

@@ -24,11 +24,72 @@ from collections import Counter
 import multiprocessing
 import time
 import glob
+import concurrent.futures as cf
 
-from sklearn.cluster import DBSCAN, KMeans, SpectralClustering
-#from cuml.cluster import DBSCAN
+#from sklearn.cluster import DBSCAN, KMeans, SpectralClustering
+from cuml.cluster import DBSCAN
 
 
+
+def process_element(X, Y):
+    #logic
+
+    #X=X.to(device)
+
+    pred = mva(X) #mlp, not using gnn for now
+    
+    #here must move data to CPU for numpy
+    #pred = pred.cpu()
+
+    #clusterize data with DBSCAN (arbitrary hyperparams so far)
+    #pred = pred.detach().numpy()
+    clusterizer = DBSCAN(eps=EPS, min_samples=3) # to match knn graph
+    clusterizer.fit(pred)
+
+
+    #get metadata of predicted track and compare
+    u_labels = np.unique(clusterizer.labels_)
+    n_particles = np.unique(Y)
+    cluster_ratios.append(len(u_labels)/len(n_particles))
+    
+    
+    # metric definitions:
+    LHC_match_efficiencies = []
+    perfect_match_efficiencies = []
+    for l in u_labels:
+        if l==-1: continue
+    
+        extraneous_i = 0
+        total_sims = []
+        for i in range(len(pred)):
+            if clusterizer.labels_[i] == l:
+                total_sims.append(Y[i])
+        #print(f"Cluster {l}:", end=" ")
+        all = len(total_sims)
+        counts = Counter(total_sims)
+        mce = counts.most_common(1)[0][0]
+        total_sims = [item for item in total_sims if item != mce]
+        extraneous_i = len(total_sims)
+        match_eff = 1 - (extraneous_i/all)
+        #print(f"Ratio: {extraneous_i}/{all}. Match efficiency: {match_eff}.", end=" ")
+        #if match_eff > 0.75: print("(LHC Match)")
+        #if match_eff == 1: print("(Perfect Match)")
+        #print()
+        if match_eff == 1: perfect_match_efficiencies.append(match_eff)
+        if match_eff >= 0.75: LHC_match_efficiencies.append(match_eff)
+    LHC_percent = len(LHC_match_efficiencies)/len(u_labels)
+    perfect_percent = len(perfect_match_efficiencies)/len(u_labels)
+    
+    #LHC_percents.append(LHC_percent)
+    #perfect_percents.append(perfect_percent)
+    #if LHC_percent >= 0.9: LHC_matches.append(1)
+    #else: LHC_matches.append(0)
+    #if perfect_percent >= 0.9: perfect_matches.append(1)
+    #else: perfect_matches.append(0)
+
+    result = [LHC_percent, perfect_percent]
+
+    return result
 
 
 
@@ -53,8 +114,8 @@ def main():
 
 
 
-    #define vars for metric calc, using pseudo-exponential dist below 0.4
-    EPS_arr = [0.001, 0.002, 0.005, 0.011, 0.022, 0.046, 0.095, 0.194, 0.290, 0.400]
+    #define vars for metric calc
+    EPS_arr = [0.01, 0.11, 0.21, 0.31, 0.41, 0.51, 0.61, 0.71, 0.81, 0.91, 1.01]
     LHC_arr = []
     perfect_arr = []
     for EPS in EPS_arr:
@@ -73,7 +134,24 @@ def main():
         #print("\nCalculating metrics...")
 
         
+        #####parallel processing
+
+        num_threads = 4 # modify, look at nvidia-smi for example
+
+        with cf.ThreadPoolExecutor(max_workers=num_threads) as ex:
+            args_list = [(X,Y) for i,(X,Y,sizeList) in enumerate(testDS)]
         
+            futures = [ex.submit(process_element, *args) for args in args_list]
+            cf.wait(futures)
+            
+            results = [f.result() for f in futures]
+
+        #####
+
+        LHC_arr.append(np.mean(results[:,0]))
+        perfect_arr.append(np.mean(results[:,1]))
+
+        '''    
         for i,(X,Y,sizeList) in enumerate(testDS):
             if i>len(testDS):
                 i=0
@@ -134,10 +212,10 @@ def main():
             #if perfect_percent >= 0.9: perfect_matches.append(1)
             #else: perfect_matches.append(0)
 
-
+        
         LHC_arr.append(np.mean(LHC_percents))
         perfect_arr.append(np.mean(perfect_percents))
-        
+        '''
         
 
     print("Done, generating plots")

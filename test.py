@@ -40,7 +40,7 @@ def main():
     featureBranches = ["pixelU","pixelV","pixelEta","pixelPhi","pixelR","pixelZ","pixelCharge","pixelTrackerLayer"]
 
     
-    testDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan31/test/*"), featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=20)
+    testDS = OctopiDataset(glob.glob("/eos/user/n/nihaubri/OctopiNtuples/QCDJan31/test/*"), featureBranches=featureBranches,labelBranch="pixelSimTrackID",batchsize=1)
 
     print("test dataset has {} jets. Running {} batches".format(len(testDS)*testDS.batchsize,len(testDS)))
     #directory_path = 'QCDJan26/'
@@ -54,7 +54,8 @@ def main():
 
 
     #define vars for metric calc, using pseudo-exponential dist below 0.4
-    EPS_arr = [0.001, 0.002, 0.005, 0.011, 0.022, 0.046, 0.095, 0.194, 0.290, 0.400]
+    #EPS_arr = [0.001, 0.002, 0.005, 0.011, 0.022, 0.046, 0.095, 0.194, 0.290, 0.400]
+    EPS_arr = [0.001, 0.011, 0.021, 0.031, 0.041, 0.051, 0.061, 0.071, 0.081, 0.091, 1.001]
     LHC_arr = []
     perfect_arr = []
     for EPS in EPS_arr:

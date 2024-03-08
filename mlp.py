@@ -74,7 +74,7 @@ def PairwiseHingeLoss(pred,y,a = torch.tensor(1.0)):
     dists = torch.pdist(pred).flatten()
     ys = torch.pdist(y.to(torch.float).unsqueeze(0).T,0.0).flatten() #0-norm: 0 if same, 1 if different
     hinge_part = torch.max(torch.tensor(0),a*(1 - dists)) #TODO: margin ('1'-x) is arbitrary and dependent on scale factor of patent space. Needs optimization.
-    return torch.mean(torch.where(ys==0.0, dists, hinge_part)) / len(ys) # normalized?
+    return torch.mean(torch.where(ys==0.0, dists, hinge_part))
 
 
 class Net(nn.Module):
@@ -132,7 +132,7 @@ def main():
 
     epochLosses = []
     epochValLosses = []
-    for epoch in range(10):
+    for epoch in range(2): #was 10
         epochLoss = torch.zeros(1,device=device).detach()
         epochValLoss = torch.zeros(1,device=device).detach()
 
@@ -162,7 +162,7 @@ def main():
                     if jetY.shape[0]==1: #needed for jan26 ntuples but not later
                         continue
                     batchLoss+=PairwiseHingeLoss(jetPred,jetY, torch.tensor(10)) #a=weight of hinge over MSE, trying 10X loss for hinge.
-            
+
                 if i%50==epoch:
                     print("batch {} loss: {:.5f}".format(i,float(batchLoss.detach())))
                 epochLoss+=batchLoss.detach()
@@ -174,7 +174,8 @@ def main():
             scaler.step(opt)
             scaler.update()
         
-        epochLosses.append(float(epochLoss))
+        #normalize loss before append
+        epochLosses.append(float(epochLoss)/float(len(trainDS)))
         scheduler.step()
         
         mva.eval()
@@ -190,11 +191,11 @@ def main():
 
             predsplit = torch.tensor_split(pred,tuple(sizeList),dim=0)
             ysplit = torch.tensor_split(Y,tuple(sizeList),dim=0)
-            for (jetPred,jetY) in zip(predsplit,ysplit): 
+            for (jetPred,jetY) in zip(predsplit,ysplit): # could use this w/ clustering, or run on less data
                 if jetY.shape[0]==1: #needed for jan26 ntuples but not later
                     continue
                 epochValLoss+=PairwiseHingeLoss(jetPred,jetY, torch.tensor(10)).detach()
-        epochValLosses.append(float(epochValLoss))
+        epochValLosses.append(float(epochValLoss)/float(len(valDS)))
         print("Epoch time: {:.2f} Training Loss: {:.2f} Validation Loss: {:.2f}".format(time.time()-epochStart,epochLosses[-1],epochValLosses[-1]))
 
 

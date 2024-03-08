@@ -2,7 +2,7 @@
 
 cd /eos/user/j/jshteren/OCToPi
 
-./eos/user/j/jshteren/OCToPi/env.sh
+. /eos/user/j/jshteren/OCToPi/env.sh
 
 #if [ ! -d "venv" ]; then
 #    python3 -m venv venv
@@ -27,7 +27,7 @@ echo 'Running File...'
 
 python3 /eos/user/j/jshteren/OCToPi/mlp.py
 #python3 /eos/user/j/jshteren/OCToPi/gnn.py
-python3 /eos/user/j/jshteren/OCToPi/test.py
+#python3 /eos/user/j/jshteren/OCToPi/test.py
 
 echo 'Finished'
 deactivate

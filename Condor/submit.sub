@@ -11,4 +11,6 @@ request_memory = 45000
 request_disk = 10000
 +MaxRuntime = 24*60*60
 
-queue
+Queue Arguments from (
+25
+)

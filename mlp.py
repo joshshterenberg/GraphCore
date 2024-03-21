@@ -23,6 +23,12 @@ import time
 import glob
 
 
+#####
+lsize = sys.argv[1]
+print(f"LSize: {lsize}")
+lsize = int(lsize)
+#####
+
 
 class OctopiDataset(Dataset):
 
@@ -81,17 +87,17 @@ class Net(nn.Module):
     def __init__(self,d):
         super(Net,self).__init__()
         self.d = d
-        self.fc1 = nn.Linear(self.d,25)
+        self.fc1 = nn.Linear(self.d,lsize)
         self.ac1 = nn.LeakyReLU()
-        self.fc2 = nn.Linear(25,25)
+        self.fc2 = nn.Linear(lsize,lsize)
         self.ac2 = nn.LeakyReLU()
-        self.fc3 = nn.Linear(25,25)
+        self.fc3 = nn.Linear(lsize,lsize)
         self.ac3 = nn.LeakyReLU()
-        self.fc4 = nn.Linear(25,25)
+        self.fc4 = nn.Linear(lsize,lsize)
         self.ac4 = nn.LeakyReLU()
-        self.fc5 = nn.Linear(25,25)
+        self.fc5 = nn.Linear(lsize,lsize)
         self.ac5 = nn.LeakyReLU()
-        self.fcLast = nn.Linear(25,8) #2nd dim must match gnn. attempting cast to 8d for no reason
+        self.fcLast = nn.Linear(lsize,8) #2nd dim must match gnn. attempting cast to 8d for no reason
     
     def forward(self,x):
         x = self.fc1(x)
@@ -125,14 +131,14 @@ def main():
 
 
     mva = Net(d=len(featureBranches)).to(device) ## with xmod set, without should be 6
-    opt = torch.optim.Adam(mva.parameters(),lr=.000) # was 0.001, testing
+    opt = torch.optim.Adam(mva.parameters(),lr=0.001)
 
     scaler = GradScaler()
     scheduler = StepLR(opt, step_size=3, gamma=0.5)
 
     epochLosses = []
     epochValLosses = []
-    for epoch in range(2): #was 10
+    for epoch in range(20): #was 10
         epochLoss = torch.zeros(1,device=device).detach()
         epochValLoss = torch.zeros(1,device=device).detach()
 
@@ -175,7 +181,7 @@ def main():
             scaler.update()
         
         #normalize loss before append
-        epochLosses.append(float(epochLoss)/float(len(trainDS)))
+        epochLosses.append(float(epochLoss)/float(trainDS.count))
         scheduler.step()
         
         mva.eval()
@@ -191,11 +197,12 @@ def main():
 
             predsplit = torch.tensor_split(pred,tuple(sizeList),dim=0)
             ysplit = torch.tensor_split(Y,tuple(sizeList),dim=0)
+            batchLoss = torch.zeros(1, device=device)
             for (jetPred,jetY) in zip(predsplit,ysplit): # could use this w/ clustering, or run on less data
                 if jetY.shape[0]==1: #needed for jan26 ntuples but not later
                     continue
                 epochValLoss+=PairwiseHingeLoss(jetPred,jetY, torch.tensor(10)).detach()
-        epochValLosses.append(float(epochValLoss)/float(len(valDS)))
+        epochValLosses.append(float(epochValLoss)/float(valDS.count))
         print("Epoch time: {:.2f} Training Loss: {:.2f} Validation Loss: {:.2f}".format(time.time()-epochStart,epochLosses[-1],epochValLosses[-1]))
 
 
@@ -204,12 +211,12 @@ def main():
     plt.legend()
     plt.ylabel("Loss")
     plt.xlabel("Epoch")
-    plt.savefig("loss.png")
+    plt.savefig(f"loss_{lsize}.png")
 
     print("Saved loss.png")
 
     #save model for later use
-    torch.save(mva, 'models/trained_mlp.pth')
+    torch.save(mva, f"models/trained_mlp_{lsize}.pth")
 
     print("Saved model successfully")
 

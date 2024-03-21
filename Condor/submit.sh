@@ -25,9 +25,10 @@ cd /eos/user/j/jshteren/OCToPi
 
 echo 'Running File...'
 
-python3 /eos/user/j/jshteren/OCToPi/mlp.py
-#python3 /eos/user/j/jshteren/OCToPi/gnn.py
-#python3 /eos/user/j/jshteren/OCToPi/test.py
+python3 /eos/user/j/jshteren/OCToPi/mlp.py $1
+#python3 /eos/user/j/jshteren/OCToPi/gnn.py $1
+#python3 /eos/user/j/jshteren/OCToPi/test_eps.py $1
+#python3 /eos/user/j/jshteren/OCToPi/test_layer.py $1
 
 echo 'Finished'
 deactivate

@@ -28,6 +28,11 @@ import glob
 from sklearn.cluster import DBSCAN, KMeans, SpectralClustering
 #from cuml.cluster import DBSCAN
 
+#####
+lsize = sys.argv[1]
+print(f"LSize: {lsize}")
+lsize = int(lsize)
+#####
 
 
 
@@ -46,7 +51,7 @@ def main():
     #directory_path = 'QCDJan26/'
 
     #load models
-    mva = torch.load('models/trained_mlp.pth')
+    mva = torch.load(f"models/trained_mlp_{lsize}.pth")
     mva.to(device).eval()
     #model = torch.load('models/trained_gnn.pth')
     #model.eval()
@@ -56,6 +61,7 @@ def main():
     #define vars for metric calc, using pseudo-exponential dist below 0.4
     #EPS_arr = [0.001, 0.002, 0.005, 0.011, 0.022, 0.046, 0.095, 0.194, 0.290, 0.400]
     EPS_arr = [0.001, 0.011, 0.021, 0.031, 0.041, 0.051, 0.061, 0.071, 0.081, 0.091, 1.001]
+    #EPS_arr = [0.001] #change
     LHC_arr = []
     perfect_arr = []
     for EPS in EPS_arr:
@@ -88,6 +94,9 @@ def main():
         
             #here must move data to CPU for numpy
             pred = pred.cpu()
+            if pred.shape[0] <= 0: 
+                print("Empty datapoint, can't apply DBSCAN")
+                continue
 
             #clusterize data with DBSCAN (arbitrary hyperparams so far)
             pred = pred.detach().numpy()
@@ -148,8 +157,8 @@ def main():
     plt.ylabel("Percent")
     plt.title("Performance vs. DBSCAN EPS")
     plt.legend()
-    plt.savefig("eps_graph.png")
-
+    plt.savefig(f"eps_graph_{lsize}.png")
+    plt.close()
     
 
 

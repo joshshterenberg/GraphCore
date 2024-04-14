@@ -65,13 +65,15 @@ def main():
 
 
     #define vars for metric calc, using pseudo-exponential dist below 0.4
-    EPS_arr = [0.001, 0.002, 0.005, 0.011, 0.022, 0.046, 0.095, 0.194, 0.290, 0.400]
+    EPS_arr = [0.001]
     #EPS_arr = [0.001, 0.011, 0.021, 0.031, 0.041, 0.051, 0.061, 0.071, 0.081, 0.091, 1.001]
     #EPS_arr = [0.001] #change
     LHC_arr = []
     perfect_arr = []
+
+    pts = []
+
     for EPS in EPS_arr:
-    
         cluster_ratios = []
         LHC_matches = []
         perfect_matches = []
@@ -95,7 +97,9 @@ def main():
             print(f"EPS {EPS}. Calculating {i} of {len(testDS)}.")
 
             X=X.to(device)
-            Y=Y[0]
+            Y=Y[0] 
+            pts.append(Y[1])
+
             if WITH_GPU: 
                 l1 = mva(X) #mlp
                 edge_index = geonn.knn_graph(l1, k=5) #potential crunch here
@@ -157,22 +161,19 @@ def main():
             #else: perfect_matches.append(0)
 
 
-        LHC_arr.append(np.mean(LHC_percents))
-        perfect_arr.append(np.mean(perfect_percents))
-        
         
 
     print("Done, generating plots")
-    plt.plot(EPS_arr, LHC_arr, label='LHC')
-    plt.plot(EPS_arr, perfect_arr, label='perfect')
-    plt.xlabel("EPS")
+    plt.scatter(pts, LHC_percents, label='LHC')
+    plt.scatter(pts, perfect_percents, label='perfect')
+    plt.xlabel("pt")
     plt.ylabel("Percent")
-    plt.title("Performance vs. DBSCAN EPS")
+    plt.title("Performance vs. Sim Track Pt")
     plt.legend()
     if WITH_GPU:
-        plt.savefig(f"plots/eps_graph_gpu_{lsize}.png")
+        plt.savefig(f"pts_graph_gpu_{lsize}.png")
     else:
-        plt.savefig(f"plots/eps_graph_{lsize}.png")
+        plt.savefig(f"pts_graph_{lsize}.png")
     plt.close()
     
 

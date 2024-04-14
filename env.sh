@@ -3,8 +3,6 @@ if [ ! -d "venv" ]; then
 fi
 . venv/bin/activate
 python3 -m pip install --upgrade pip
-#python3 -m pip install torch==2.1.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-#python3 -m pip install torch torchvision torchaudio
 
 dversion="2.2.1+cu121"
 version=$(python3 -m pip show torch | grep Version | awk '{print $2}')
@@ -28,6 +26,5 @@ python3 -m pip install uproot
 python3 -m pip install matplotlib
 python3 -m pip install numpy
 python3 -m pip install scipy
-#python3 -m pip install cuml
-#python3 -m pip install collections #part of python3 by default
-#python3 -m pip install multiprocessing #part of python3 by default
+python3 -m pip install onnx onnxruntime
+python3 -m pip install skl2onnx
